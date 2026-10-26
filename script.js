@@ -1,15 +1,6 @@
 "use strict";
 
-/* ==========================================================================
-   ДАННЫЕ ПЕСЕН
-   Чтобы добавить песню, скопируйте любой блок в SONGS и заполните поля:
-   id (латиницей, уникальный), title, lang ("ru" | "kk" | "kk+ru"),
-   key (необязательно), note (необязательно), noText: true (только аккорды),
-   sources (необязательно): [{ name: "Название источника", url: "https://..." }],
-   text (текст; аккорды можно писать строкой над текстом, как в заметках).
-   Разделы "Куплет", "Припев", "Бридж", "Вставка", "Вступление", "Қайырмасы"
-   распознаются автоматически.
-   ========================================================================== */
+/* ====== ДАННЫЕ ПЕСЕН (сохранены полностью) ====== */
 const SONGS = [
 { id: "tolko-ty-gospod", title: "Только Ты Господь", lang: "ru", note: "Фрагмент", text: `
 Только Ты Господь
@@ -2175,204 +2166,291 @@ p: E H A H
 vs: C#m H A` }
 ];
 
-/* ==========================================================================
-   АККОРДЫ: распознавание и транспонирование
-   Нестандартные записи (H, Hb, Hm, G/H, C/Em) не изменяются.
-   ========================================================================== */
+/* ===================== МУЗЫКАЛЬНАЯ ТЕОРИЯ ===================== */
+const NOTE_BASE = { C:0, D:2, E:4, F:5, G:7, A:9, B:11, H:11 };
+const SHARP_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const FLAT_NAMES  = ["C","Db","D","Eb","E","F","Gb","G","Ab","A","Bb","B"];
+const QUAL = "[A-Za-z0-9+#°ø()]*";
+const CHORD_RE = new RegExp("^([A-H])([#b]?)(" + QUAL + ")(?:\\/([A-H])([#b]?)(" + QUAL + "))?$");
+const ODD_RE = /^(?:[A-H][#b]?(?:m|sus\d?|\d)*[-/~]?){2,}$/;
 const SEC_RE = /^\s*(?:\d+\s*)?(?:куплет|куп|припев|пр|бридж|bridge|вставка|вступление|интро|пред\s*-?\s*припев|пре-?припев|мост|запев|тег|концовка|речитатив|проигрыш|verse|chorus|текст|другие версии)\s*\d*\s*:?\s*(?:модуляция|org|piano)?\s*(?:[xх]\s*\d+)?\s*:?\s*$/i;
 const LBL_RE = /^\s*(?:(?:k|p|pp|vs|vst|v|koda|intro|конец|проигрыш)[,:.\s]*)+$/i;
-const ODD_RE = /^(?:[A-H][#b]?(?:m|sus\d?|\d)*[-/~]?){2,}$/;
-const QUAL_RE = /^(?:maj|min|dim|aug|sus|add|m|M|\d+|\+|[#~])*$/;
-const CHORD_RE = /^(?:([A-H])([#b]?)([^/]*))?(?:\/([A-H])([#b]?)([^/]*))?$/;
-const SHARPS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-const FLATS = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"];
-const NATURAL = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
 
-function splitToken(raw) {
-  const m = raw.match(/^([|(\[\-]*)(.*?)([|)\].\-:,/]*)$/);
-  return { pre: m[1], core: m[2], post: m[3] };
+function mod12(n){ return ((n % 12) + 12) % 12; }
+function parseNote(letter, acc){
+  if(!(letter in NOTE_BASE)) return null;
+  let s = NOTE_BASE[letter];
+  if(acc === "#") s += 1;
+  else if(acc === "b") s -= 1;
+  return mod12(s);
 }
-
-function chordInfo(core) {
-  if (!core) return null;
+function noteName(semi, useFlats, notation){
+  semi = mod12(semi);
+  let n = (useFlats ? FLAT_NAMES : SHARP_NAMES)[semi];
+  if(notation === "german"){
+    if(n === "Bb") n = "B";
+    else if(n === "B") n = "H";
+  }
+  return n;
+}
+function splitToken(raw){
+  const m = raw.match(/^([|(\[\-–—]*)(.*?)([|)\]\-–—:,]*)$/);
+  return m ? { pre:m[1], core:m[2], post:m[3] } : { pre:"", core:raw, post:"" };
+}
+function chordInfo(core){
+  if(!core) return null;
   const m = core.match(CHORD_RE);
-  if (!m) return null;
-  const [, r, a, q, b, ba, bq] = m;
-  if (!r && !b) return null;
-  if (r && !QUAL_RE.test(q)) return null;
-  if (!r && q) return null;
-  if (b && !QUAL_RE.test(bq || "")) return null;
-  return { r, a, q: q || "", b, ba, bq: bq || "" };
+  if(!m) return null;
+  return { r:m[1], ra:m[2], q:m[3]||"", b:m[4], ba:m[5], bq:m[6]||"" };
 }
-
-/* "chord" | "label" | "decor" | null */
-function tokenKind(raw) {
-  if (/^(?:(?:k|p|pp|vs|vst|v|intro)[,:]*)+$/i.test(raw) || /^(?:к|пр)-$/i.test(raw)) return "label";
-  if (/^(?:[-–—]|[-–]?\d+p?\.?|[(\[]\d+|раза?[)\]]?|m|[xх]\d+)$/i.test(raw)) return "decor";
+function transposeChord(core, shift, useFlats, notation){
+  const c = chordInfo(core);
+  if(!c) return null;
+  const rs = parseNote(c.r, c.ra);
+  if(rs === null) return null;
+  let out = noteName(rs + shift, useFlats, notation) + c.q;
+  if(c.b){
+    const bs = parseNote(c.b, c.ba);
+    if(bs !== null) out += "/" + noteName(bs + shift, useFlats, notation) + c.bq;
+  }
+  return out;
+}
+function tokenKind(raw){
+  if(/^(?:(?:k|p|pp|vs|vst|v|intro)[,:]*)+$/i.test(raw) || /^(?:к|пр)-$/i.test(raw)) return "label";
+  if(/^(?:[-–—]|[-–]?\d+p?\.?|[(\[]\d+|раза?[)\]]?|m|[xх]\d+)$/i.test(raw)) return "decor";
   const core = splitToken(raw).core;
   return chordInfo(core) || ODD_RE.test(core) ? "chord" : null;
 }
-
-function isChordLine(line) {
+function isChordLine(line){
   const toks = line.match(/\S+/g);
-  if (!toks) return false;
+  if(!toks) return false;
   const kinds = toks.map(tokenKind);
   return kinds.every(Boolean) && kinds.includes("chord");
 }
-
-function noteName(letter, acc, shift, flats) {
-  const base = NATURAL[letter] + (acc === "#" ? 1 : acc === "b" ? -1 : 0);
-  return (flats ? FLATS : SHARPS)[(((base + shift) % 12) + 12) % 12];
-}
-
-/* Возвращает { text, amb }. amb = аккорд неоднозначен и не трогается. */
-function transposeToken(raw, shift, flats) {
+function transposeToken(raw, shift, useFlats, notation){
   const { pre, core, post } = splitToken(raw);
-  const c = chordInfo(core);
-  if (!c) return { text: raw, amb: ODD_RE.test(core) };
-  if (c.r === "H" || c.b === "H" || c.bq || /[#~]/.test(c.q)) return { text: raw, amb: true };
-  if (!shift) return { text: raw, amb: false };
-  let out = "";
-  if (c.r) out += noteName(c.r, c.a, shift, flats) + c.q;
-  if (c.b) out += "/" + noteName(c.b, c.ba, shift, flats);
-  return { text: pre + out + post, amb: false };
+  if(!core) return { text: raw, amb: false };
+  if(!chordInfo(core)) return { text: raw, amb: ODD_RE.test(core) };
+  const t = transposeChord(core, shift, useFlats, notation);
+  if(t === null) return { text: raw, amb: true };
+  return { text: pre + t + post, amb: false };
 }
-
-function parseSong(text) {
+function parseSong(text){
   const lines = text.replace(/\r/g, "").split("\n");
   const out = [];
-  for (let i = 0; i < lines.length; i++) {
+  let secIdx = 0;
+  for(let i = 0; i < lines.length; i++){
     const l = lines[i];
-    if (!l.trim()) {
-      if (out.length && out[out.length - 1].t !== "blank") out.push({ t: "blank" });
-    } else if (SEC_RE.test(l)) {
-      out.push({ t: "sec", s: l.trim().replace(/:\s*$/, "") });
-    } else if (LBL_RE.test(l)) {
-      out.push({ t: "sec", s: l.trim().replace(/[:,.\s]+$/, "") });
-    } else if (isChordLine(l)) {
-      const toks = [...l.matchAll(/\S+/g)].map(m => ({ raw: m[0], i: m.index }));
-      const nx = lines[i + 1];
-      if (nx !== undefined && nx.trim() && !isChordLine(nx) && !SEC_RE.test(nx)) {
-        out.push({ t: "pair", toks, lyr: nx.replace(/\s+$/, "") });
+    if(!l.trim()){
+      if(out.length && out[out.length-1].t !== "blank") out.push({ t:"blank" });
+    } else if(SEC_RE.test(l)){
+      out.push({ t:"sec", s: l.trim().replace(/:\s*$/,""), idx: secIdx++ });
+    } else if(LBL_RE.test(l)){
+      out.push({ t:"sec", s: l.trim().replace(/[:,.\s]+$/,""), idx: secIdx++ });
+    } else if(isChordLine(l)){
+      const toks = [...l.matchAll(/\S+/g)].map(m => ({ raw:m[0], i:m.index }));
+      const nx = lines[i+1];
+      if(nx !== undefined && nx.trim() && !isChordLine(nx) && !SEC_RE.test(nx)){
+        out.push({ t:"pair", toks, lyr: nx.replace(/\s+$/,"") });
         i++;
-      } else out.push({ t: "chords", toks });
-    } else out.push({ t: "lyr", s: l.trim() });
+      } else out.push({ t:"chords", toks });
+    } else out.push({ t:"lyr", s: l.trim() });
   }
-  while (out.length && out[out.length - 1].t === "blank") out.pop();
+  while(out.length && out[out.length-1].t === "blank") out.pop();
   return out;
 }
-
-function usesFlats(blocks) {
+function usesFlats(blocks){
   return blocks.some(b => b.toks && b.toks.some(k => {
     const c = chordInfo(splitToken(k.raw).core);
-    return c && c.a === "b" && c.r !== "H";
+    return c && ((c.ra === "b") || (c.ba === "b"));
   }));
 }
 
-/* ==========================================================================
-   Подготовка данных
-   ========================================================================== */
-const hasLang = (s, l) => s.lang.split("+").includes(l);
-const norm = s => s.toLowerCase().replace(/ё/g, "е");
-SONGS.forEach((s, n) => {
-  s.order = n;
-  s.blocks = parseSong(s.text);
-  s.hasChords = s.blocks.some(b => b.toks);
-  s.flats = usesFlats(s.blocks);
-  const nPair = s.blocks.filter(b => b.t === "pair").length;
-  const nLyr = s.blocks.filter(b => b.t === "lyr").length;
-  /* none: аккордов нет; partial: аккорды заданы не для всех строк; ok: аккорды есть */
-  s.chordStatus = !s.hasChords ? "none" : (!s.noText && nPair + nLyr > 0 && nPair / (nPair + nLyr) < 0.8 ? "partial" : "ok");
-  s.hasAmb = s.blocks.some(b => b.toks && b.toks.some(k => transposeToken(k.raw, 1, false).amb));
-  const lyrics = s.blocks.filter(b => b.t === "lyr" || b.t === "pair").map(b => b.s || b.lyr);
-  s.preview = lyrics.slice(0, 2).join(" ");
-  s.haystack = norm(s.title + " " + (s.author || "") + " " + lyrics.join(" "));
-});
-
-const LANG_LABEL = { en: "English", ru: "Русский", kk: "Қазақша", "kk+ru": "Қазақша + Русский" };
-const FILTERS = [
-  { id: "all", label: "Все" },
-  { id: "ru", label: "Русский" },
-  { id: "chords", label: "С аккордами" },
-  { id: "fav", label: "Избранное" }
-];
-
-/* ==========================================================================
-   Состояние и хранилище
-   ========================================================================== */
+/* ===================== ХРАНИЛИЩЕ И СОСТОЯНИЕ ===================== */
 const store = {
-  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
-  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* хранилище недоступно */ } }
+  get(k, d){ try{ const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} },
+  del(k){ try{ localStorage.removeItem(k); }catch(e){} }
 };
 const state = {
-  q: "", filter: "all", sort: "alpha", song: null, shift: 0, scroll: 0,
+  q:"", filter:"all", keyFilter:"", sort:"alpha", song:null, shift:0, useFlats:false, capo:0,
+  scroll:0, fs: Math.min(34, Math.max(13, store.get("sc_fs", 18))),
+  notation: store.get("sc_notation", "intl"),
+  showChords: store.get("sc_chords", true),
+  compact: store.get("sc_compact", false),
+  large: store.get("sc_large", false),
   fav: new Set(store.get("sc_fav", [])),
-  fs: Math.min(34, Math.max(13, store.get("sc_fs", 18)))
+  playing: null,
+  autoScroll: { active:false, paused:false, speed:30, raf:0, last:0 }
 };
 
+/* Пользовательские песни */
+const USER_SONGS = store.get("sc_user_songs", []);
+USER_SONGS.forEach(u => { if(u && u.id && !SONGS.some(s => s.id === u.id)){ u.user = true; SONGS.push(u); } });
+
+/* Подготовка данных */
+function prepareSongs(){
+  SONGS.forEach((s, n) => {
+    s.order = n;
+    s.blocks = parseSong(s.text || "");
+    s.hasChords = s.blocks.some(b => b.toks);
+    s.flats = usesFlats(s.blocks);
+    const nPair = s.blocks.filter(b => b.t === "pair").length;
+    const nLyr = s.blocks.filter(b => b.t === "lyr").length;
+    s.chordStatus = !s.hasChords ? "none" : (!s.noText && nPair + nLyr > 0 && nPair / (nPair + nLyr) < 0.8 ? "partial" : "ok");
+    const lyrics = s.blocks.filter(b => b.t === "lyr" || b.t === "pair").map(b => b.s || b.lyr);
+    s.preview = lyrics.slice(0, 2).join(" ");
+    s.haystack = (s.title + " " + (s.author || "") + " " + lyrics.join(" ")).toLowerCase().replace(/ё/g,"е");
+  });
+}
+prepareSongs();
+
+const LANG_LABEL = { en:"English", ru:"Русский", kk:"Қазақша", "kk+ru":"Қазақша + Русский" };
+const hasLang = (s,l) => (s.lang || "").split("+").includes(l);
+const norm = s => s.toLowerCase().replace(/ё/g,"е");
 const $ = id => document.getElementById(id);
-const el = {
-  catalog: $("catalogView"), songView: $("songView"), grid: $("grid"), chips: $("chips"),
-  search: $("searchInput"), clear: $("clearSearch"), sort: $("sortSelect"), info: $("resultInfo"),
-  empty: $("empty"), emptyText: $("emptyText"), favCount: $("favCount"), body: $("songBody")
-};
-const esc = s => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
+const findSong = id => SONGS.find(s => s.id === id);
 
-/* ==========================================================================
-   Тема
-   ========================================================================== */
-function setTheme(t) {
+const el = {
+  catalog: $("catalogView"), songView: $("songView"), planView: $("planView"),
+  grid: $("grid"), chips: $("chips"), search: $("searchInput"), clear: $("clearSearch"),
+  sort: $("sortSelect"), keyFilter: $("keyFilter"), info: $("resultInfo"),
+  empty: $("empty"), emptyText: $("emptyText"), favCount: $("favCount"), body: $("songBody"),
+  sections: $("sectionsList"), playBar: $("playBar")
+};
+
+/* ===================== ТЕМА ===================== */
+function setTheme(t){
   document.documentElement.dataset.theme = t;
-  $("themeBtn").textContent = t === "dark" ? "☀" : "☾";
-  $("themeBtn").setAttribute("aria-label", t === "dark" ? "Включить светлую тему" : "Включить тёмную тему");
-  document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0f141a" : "#f3f5f7";
+  const b = $("themeBtn");
+  if(b){ b.textContent = t === "dark" ? "☀" : "☾"; b.setAttribute("aria-label", t === "dark" ? "Включить светлую тему" : "Включить тёмную тему"); }
+  const m = document.querySelector('meta[name="theme-color"]');
+  if(m) m.content = t === "dark" ? "#141616" : "#F5F1EA";
   store.set("sc_theme", t);
 }
 setTheme(store.get("sc_theme", window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
 $("themeBtn").addEventListener("click", () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
 
-/* ==========================================================================
-   Каталог
-   ========================================================================== */
-function matches(s) {
+/* ===================== ПЕРСИСТЕНТ ПЕСНИ ===================== */
+const songStateKey = id => "sc_song_" + id;
+function loadSongState(id){
+  const d = { shift:0, useFlats:null, capo:0 };
+  const v = store.get(songStateKey(id), null);
+  if(v && typeof v === "object"){
+    if(typeof v.shift === "number") d.shift = mod12(v.shift);
+    if(typeof v.capo === "number") d.capo = Math.max(0, Math.min(11, v.capo));
+    if(typeof v.useFlats === "boolean") d.useFlats = v.useFlats;
+  }
+  return d;
+}
+function saveSongState(){
+  if(!state.song) return;
+  store.set(songStateKey(state.song.id), { shift:state.shift, useFlats:state.useFlats, capo:state.capo });
+}
+
+/* ===================== УТИЛИТЫ ===================== */
+function toast(msg){
+  const t = $("toast");
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast._id); toast._id = setTimeout(() => t.classList.remove("show"), 2200);
+}
+function download(filename, text, type){
+  const blob = new Blob([text], { type: type || "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+function b64encode(str){ return btoa(unescape(encodeURIComponent(str))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""); }
+function b64decode(str){ str = str.replace(/-/g,"+").replace(/_/g,"/"); while(str.length % 4) str += "="; return decodeURIComponent(escape(atob(str))); }
+
+/* ===================== КАТАЛОГ ===================== */
+const FILTERS = [
+  { id:"all", label:"Все" },
+  { id:"ru", label:"Русский" },
+  { id:"kk", label:"Қазақша" },
+  { id:"en", label:"English" },
+  { id:"chords", label:"С аккордами" },
+  { id:"nochords", label:"Без аккордов" },
+  { id:"fav", label:"Избранное" }
+];
+function matches(s){
   const q = norm(state.q.trim());
-  if (q && !q.split(/\s+/).every(w => s.haystack.includes(w))) return false;
-  switch (state.filter) {
-    case "ru": return hasLang(s, "ru");
-    case "kk": return hasLang(s, "kk");
+  if(q && !q.split(/\s+/).every(w => s.haystack.includes(w))) return false;
+  switch(state.filter){
+    case "ru": return hasLang(s,"ru");
+    case "kk": return hasLang(s,"kk");
+    case "en": return hasLang(s,"en");
     case "chords": return s.hasChords;
+    case "nochords": return !s.hasChords;
     case "fav": return state.fav.has(s.id);
     default: return true;
   }
+  if(state.keyFilter){
+    const c = s.key && chordInfo(s.key);
+    if(!c) return false;
+    if(noteName(parseNote(c.r,c.ra), false, "intl") !== state.keyFilter) return false;
+  }
+  return true;
 }
-
-function renderChips() {
+function hl(text, q){
+  const words = (q||"").trim().split(/\s+/).filter(Boolean);
+  if(!words.length) return esc(text);
+  const re = new RegExp("(" + words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|") + ")", "gi");
+  let out = "", last = 0, m;
+  while((m = re.exec(text))){
+    out += esc(text.slice(last, m.index)) + "<mark>" + esc(m[0]) + "</mark>";
+    last = m.index + m[0].length;
+  }
+  return out + esc(text.slice(last));
+}
+function renderChips(){
   el.chips.innerHTML = FILTERS.map(f => {
-    const n = SONGS.filter(s => f.id === "all" ? true : f.id === "fav" ? state.fav.has(s.id) :
-      f.id === "chords" ? s.hasChords : f.id === "ru" ? hasLang(s, "ru") : hasLang(s, "kk")).length;
-    return `<button type="button" class="chip" data-f="${f.id}" aria-pressed="${state.filter === f.id}">${f.label} ${n}</button>`;
+    const n = SONGS.filter(s => f.id === "all" ? true : f.id === "fav" ? state.fav.has(s.id) : matches2(s, f.id)).length;
+    return `<button type="button" class="chip" data-f="${f.id}" aria-pressed="${state.filter===f.id}">${f.label} ${n}</button>`;
   }).join("");
 }
-
-function renderCatalog() {
-  const list = SONGS.filter(matches).sort((a, b) =>
-    state.sort === "alpha" ? a.title.localeCompare(b.title, "ru") : a.order - b.order);
+function matches2(s, f){
+  switch(f){
+    case "ru": return hasLang(s,"ru");
+    case "kk": return hasLang(s,"kk");
+    case "en": return hasLang(s,"en");
+    case "chords": return s.hasChords;
+    case "nochords": return !s.hasChords;
+    default: return true;
+  }
+}
+function fillKeyFilter(){
+  const keys = new Set();
+  SONGS.forEach(s => { const c = s.key && chordInfo(s.key); if(c) keys.add(noteName(parseNote(c.r,c.ra), false, "intl")); });
+  el.keyFilter.innerHTML = '<option value="">Любая</option>' + [...keys].sort().map(k => `<option value="${k}">${k}</option>`).join("");
+}
+function renderCatalog(){
+  let list = SONGS.filter(matches);
+  if(state.keyFilter){
+    list = list.filter(s => {
+      const c = s.key && chordInfo(s.key);
+      return c && noteName(parseNote(c.r,c.ra), false, "intl") === state.keyFilter;
+    });
+  }
+  list.sort((a,b) => state.sort === "alpha" ? a.title.localeCompare(b.title, "ru") : a.order - b.order);
   el.clear.hidden = !state.q;
   renderChips();
   el.grid.innerHTML = list.map(s => `
     <article class="card">
       <a class="card-link" href="#/song/${encodeURIComponent(s.id)}">
-        <h3>${esc(s.title)}</h3>
-        <p class="preview">${s.noText ? "Только аккорды" : esc(s.preview)}</p>
+        <h3>${hl(s.title, state.q)}</h3>
+        <p class="preview">${s.noText ? "Только аккорды" : hl(s.preview, state.q)}</p>
         <div class="tags">
           ${s.key ? `<span class="tag key">${esc(s.key)}</span>` : ""}
-          <span class="tag">${LANG_LABEL[s.lang]}</span>
+          <span class="tag">${LANG_LABEL[s.lang] || s.lang}</span>
           ${s.author ? `<span class="tag">${esc(s.author)}</span>` : ""}
           ${s.hasChords ? '<span class="tag">Аккорды</span>' : ""}
           ${s.noText ? '<span class="tag warn">Текст не добавлен</span>' : ""}
           ${s.picked ? '<span class="tag">Подбор, проверить на слух</span>' : ""}
           ${s.chordStatus === "none" ? '<span class="tag warn">Аккорды требуют проверки</span>' : ""}
-          
+          ${s.user ? '<span class="tag">Локальная</span>' : ""}
           ${s.note ? `<span class="tag">${esc(s.note)}</span>` : ""}
         </div>
       </a>
@@ -2382,237 +2460,797 @@ function renderCatalog() {
   el.info.textContent = list.length ? `Найдено: ${list.length} из ${SONGS.length}` : "";
   el.empty.hidden = list.length > 0;
   el.grid.hidden = list.length === 0;
-  if (!list.length) {
+  if(!list.length){
     el.emptyText.textContent = state.filter === "fav" && !state.q
       ? "В избранном пока пусто. Нажмите ☆ на карточке песни, чтобы добавить её сюда."
       : "Ничего не найдено. Проверьте написание или попробуйте другое слово.";
   }
   el.favCount.textContent = state.fav.size;
 }
-
 el.search.addEventListener("input", () => { state.q = el.search.value; renderCatalog(); });
 el.clear.addEventListener("click", () => { state.q = ""; el.search.value = ""; renderCatalog(); el.search.focus(); });
 el.sort.addEventListener("change", () => { state.sort = el.sort.value; renderCatalog(); });
+el.keyFilter.addEventListener("change", () => { state.keyFilter = el.keyFilter.value; renderCatalog(); });
 el.chips.addEventListener("click", e => {
   const b = e.target.closest("[data-f]");
-  if (b) { state.filter = b.dataset.f; renderCatalog(); }
+  if(b){ state.filter = b.dataset.f; renderCatalog(); }
 });
-$("resetBtn").addEventListener("click", () => {
-  state.q = ""; state.filter = "all"; el.search.value = ""; renderCatalog();
-});
+$("resetBtn").addEventListener("click", () => { state.q = ""; state.filter = "all"; state.keyFilter = ""; el.search.value = ""; el.keyFilter.value = ""; renderCatalog(); });
 el.grid.addEventListener("click", e => {
   const b = e.target.closest(".fav-btn");
-  if (b) { toggleFav(b.dataset.id); }
+  if(b) toggleFav(b.dataset.id);
 });
-
-function toggleFav(id) {
+function toggleFav(id){
   state.fav.has(id) ? state.fav.delete(id) : state.fav.add(id);
   store.set("sc_fav", [...state.fav]);
   renderCatalog();
-  if (state.song) updateFavBtn();
+  if(state.song) updateFavBtn();
 }
 
-/* ==========================================================================
-   Страница песни
-   ========================================================================== */
-function chordHtml(raw, shift, flats) {
+/* ===================== РЕНДЕР ПЕСНИ ===================== */
+function chordHtml(raw){
   const kind = tokenKind(raw);
-  if (kind === "label") return `<span class="lbl">${esc(raw)}</span>`;
-  if (kind === "decor") return `<span class="dec">${esc(raw)}</span>`;
-  const r = transposeToken(raw, shift, flats);
-  const shown = esc(r.text.replace(/\.+$/, ""));
-  return `<span class="ch${r.amb && shift ? " amb" : ""}">${shown}</span>`;
+  if(kind === "label") return `<span class="lbl">${esc(raw)}</span>`;
+  if(kind === "decor") return `<span class="dec">${esc(raw)}</span>`;
+  const r = transposeToken(raw, state.shift, state.useFlats, state.notation);
+  const shown = esc(r.text.replace(/\.+$/,""));
+  return `<span class="ch${r.amb ? " amb" : ""}">${shown}</span>`;
 }
-
-function renderBody(song, shift) {
-  return song.blocks.map(b => {
-    switch (b.t) {
+function renderBody(song){
+  const sections = [];
+  const html = song.blocks.map(b => {
+    switch(b.t){
       case "blank": return '<div class="blank"></div>';
-      case "sec": return `<div class="sec">${esc(b.s)}</div>`;
+      case "sec": {
+        const id = "sec-" + b.idx;
+        sections.push({ id, label: b.s });
+        return `<div class="sec" id="${id}">${esc(b.s)}</div>`;
+      }
       case "lyr": return `<div class="lyr">${esc(b.s)}</div>`;
-      case "chords": return `<div class="ln chords">${b.toks.map(k => chordHtml(k.raw, shift, song.flats)).join("")}</div>`;
+      case "chords": return `<div class="ln chords">${b.toks.map(k => chordHtml(k.raw)).join(" ")}</div>`;
       case "pair": {
         let h = "";
-        if (b.toks[0].i > 0) h += `<span class="seg"><span class="c">&nbsp;</span><span class="w">${esc(b.lyr.slice(0, b.toks[0].i))}</span></span>`;
+        if(b.toks[0].i > 0) h += `<span class="seg"><span class="c">&nbsp;</span><span class="w">${esc(b.lyr.slice(0, b.toks[0].i))}</span></span>`;
         b.toks.forEach((k, x) => {
-          const end = x + 1 < b.toks.length ? b.toks[x + 1].i : b.lyr.length;
+          const end = x + 1 < b.toks.length ? b.toks[x+1].i : b.lyr.length;
           const txt = b.lyr.slice(k.i, Math.max(end, k.i));
-          h += `<span class="seg"><span class="c">${chordHtml(k.raw, shift, song.flats)}</span><span class="w">${txt ? esc(txt) : "&nbsp;"}</span></span>`;
+          h += `<span class="seg"><span class="c">${chordHtml(k.raw)}</span><span class="w">${txt ? esc(txt) : "&nbsp;"}</span></span>`;
         });
         return `<div class="ln">${h}</div>`;
       }
     }
     return "";
   }).join("");
+  return { html, sections };
 }
-
-function toPlain(song, shift) {
-  const shown = raw => transposeToken(raw, shift, song.flats).text.replace(/\.+$/, "");
-  const lines = song.blocks.map(b => {
-    if (b.t === "blank") return "";
-    if (b.t === "sec") return b.s;
-    if (b.t === "lyr") return b.s;
-    if (b.t === "chords") return b.toks.map(k => shown(k.raw)).join(" ");
-    let cl = "";
-    b.toks.forEach(k => {
-      while (cl.length < k.i) cl += " ";
-      if (cl && !cl.endsWith(" ")) cl += " ";
-      cl += shown(k.raw);
-    });
-    return cl + "\n" + b.lyr;
-  });
-  const key = currentKey(song, shift);
-  return song.title + (key ? `\nТональность: ${key}` : "") + "\n\n" + lines.join("\n");
+function currentKey(){
+  const s = state.song;
+  if(!s || !s.key) return "";
+  return transposeChord(s.key, state.shift, state.useFlats, state.notation) || s.key;
 }
-
-function currentKey(song, shift) {
-  return song.key ? transposeToken(song.key, shift, song.flats).text : "";
+function shiftLabel(){
+  let d = state.shift;
+  if(d > 6) d -= 12;
+  return d === 0 ? "оригинал" : (d > 0 ? "+" : "") + d + " п/т";
 }
-
-function updateFavBtn() {
+function updateFavBtn(){
+  if(!state.song) return;
   const on = state.fav.has(state.song.id);
   const b = $("favBtn");
   b.textContent = on ? "★" : "☆";
   b.setAttribute("aria-pressed", on);
   b.setAttribute("aria-label", on ? "Убрать из избранного" : "Добавить в избранное");
 }
-
-function updateSong() {
+function renderKeySelect(){
+  const sel = $("keySelect");
   const s = state.song;
+  if(!s || !s.key){ sel.innerHTML = '<option>—</option>'; sel.disabled = true; return; }
+  const c = chordInfo(s.key);
+  if(!c){ sel.disabled = true; return; }
+  sel.disabled = false;
+  const minor = /^m(?!aj)/.test(c.q || "");
+  const orig = parseNote(c.r, c.ra);
+  const cur = mod12(orig + state.shift);
+  let html = "";
+  for(let i = 0; i < 12; i++){
+    const nm = noteName(i, state.useFlats, state.notation) + (minor ? "m" : "");
+    html += `<option value="${i}"${i === cur ? " selected" : ""}>${nm}</option>`;
+  }
+  sel.innerHTML = html;
+}
+function renderSections(sections){
+  if(!sections.length){ el.sections.style.display = "none"; return; }
+  el.sections.style.display = "";
+  el.sections.innerHTML = "<h3>Разделы</h3>" + sections.map(sec =>
+    `<button type="button" data-sec="${sec.id}">${esc(sec.label)}</button>`).join("");
+}
+function updateCapoInfo(){
+  const key = currentKey();
+  const ci = $("capoInfo");
+  if(!key){ ci.textContent = ""; return; }
+  const sounding = transposeChord(state.song.key, state.shift + state.capo, state.useFlats, state.notation);
+  ci.textContent = `Играете: ${key} · каподастр ${state.capo} · звучит: ${sounding || "—"}`;
+}
+function updateSong(){
+  const s = state.song;
+  if(!s) return;
   el.body.style.setProperty("--fs", state.fs + "px");
-  el.body.innerHTML = renderBody(s, state.shift);
-  const key = currentKey(s, state.shift);
+  const { html, sections } = renderBody(s);
+  el.body.innerHTML = html;
+  renderSections(sections);
+  const key = currentKey();
   $("tKey").textContent = key || (s.hasChords ? "Аккорды" : "—");
-  $("tShift").textContent = state.shift ? (state.shift > 0 ? "+" : "") + state.shift + " п/т" : "оригинал";
-  $("ambNote").hidden = !(state.shift && s.hasAmb);
+  $("tShift").textContent = shiftLabel();
+  $("ambNote").hidden = !(s.blocks.some(b => b.toks && b.toks.some(k => transposeToken(k.raw, state.shift, state.useFlats, state.notation).amb)));
   const dis = !s.hasChords;
-  ["tUp", "tDown", "tReset"].forEach(id => { $(id).disabled = dis; $(id).style.opacity = dis ? ".4" : ""; });
-  $("songMeta").textContent = [LANG_LABEL[s.lang], s.author && "Автор: " + s.author, key && "Тональность " + key + (state.shift ? " (оригинал " + s.key + ")" : ""), s.note]
-    .filter(Boolean).join(", ");
+  ["tUp","tDown","tReset","flatsBtn"].forEach(id => { const b = $(id); if(b){ b.disabled = dis; b.style.opacity = dis ? ".4" : ""; } });
+  $("songMeta").textContent = [LANG_LABEL[s.lang] || s.lang, s.author && "Автор: " + s.author,
+    key && "Тональность " + key + (state.shift ? " (оригинал " + (transposeChord(s.key, 0, state.useFlats, state.notation) || s.key) + ")" : ""),
+    s.note].filter(Boolean).join(", ");
+  document.body.classList.toggle("no-chords", !state.showChords);
+  document.body.classList.toggle("compact", state.compact);
+  document.body.classList.toggle("large", state.large);
+  $("chordsToggle").setAttribute("aria-pressed", state.showChords);
+  $("compactToggle").setAttribute("aria-pressed", state.compact);
+  $("largeToggle").setAttribute("aria-pressed", state.large);
+  $("capoRange").value = state.capo;
+  updateCapoInfo();
+  renderKeySelect();
+  saveSongState();
+}
+function setOG(title, desc){
+  document.title = title;
+  const setMeta = (prop, val) => {
+    let m = document.querySelector(`meta[property="${prop}"]`);
+    if(!m){ m = document.createElement("meta"); m.setAttribute("property", prop); document.head.appendChild(m); }
+    m.setAttribute("content", val);
+  };
+  setMeta("og:title", title);
+  setMeta("og:description", desc || "");
 }
 
-function openSong(id) {
-  const s = SONGS.find(x => x.id === id);
-  if (!state.song && !el.catalog.hidden) state.scroll = window.scrollY;
-  el.catalog.hidden = true; el.songView.hidden = false;
+function openSong(id, params){
+  const s = findSong(id);
+  if(!state.song && !el.catalog.hidden) state.scroll = window.scrollY;
+  hideAllViews();
+  el.songView.hidden = false;
   document.body.classList.add("is-song");
   setNav("");
-  if (!s) {
+  if(!s){
     state.song = null;
     $("songTitle").textContent = "Песня не найдена";
     $("songMeta").textContent = "";
     el.body.innerHTML = '<p>Такой песни нет в каталоге. Вернитесь в каталог и выберите песню из списка.</p>';
-    ["noTextNote", "ambNote", "srcNote", "chordNote"].forEach(i => $(i).hidden = true);
-    document.title = "Песня не найдена — Песни и аккорды";
+    ["noTextNote","ambNote","srcNote","chordNote"].forEach(i => $(i).hidden = true);
+    setOG("Песня не найдена — Песни и аккорды");
     return;
   }
-  state.song = s; state.shift = 0;
+  state.song = s;
+  const saved = loadSongState(s.id);
+  state.shift = saved.shift;
+  state.useFlats = saved.useFlats === null ? s.flats : saved.useFlats;
+  state.capo = saved.capo;
+
+  // Программа служения: применить тональность элемента
+  if(state.playing){
+    const pl = playlists.find(p => p.id === state.playing.playlistId);
+    const item = pl && pl.items[state.playing.index];
+    if(item && item.songId === s.id && typeof item.shift === "number"){
+      state.shift = mod12(item.shift);
+      if(typeof item.useFlats === "boolean") state.useFlats = item.useFlats;
+    }
+  }
+  // Тональность из URL
+  if(params && params.get("k") && s.key){
+    const tc = chordInfo(params.get("k"));
+    const oc = chordInfo(s.key);
+    if(tc && oc){
+      state.shift = mod12(parseNote(tc.r, tc.ra) - parseNote(oc.r, oc.ra));
+      if(/b/.test(params.get("k"))) state.useFlats = true;
+      else if(/#/.test(params.get("k"))) state.useFlats = false;
+    }
+  }
+
   $("songTitle").textContent = s.title;
   $("noTextNote").hidden = !s.noText;
   const cn = $("chordNote");
-  cn.hidden = !(s.chordStatus === "none" || s.picked);
+  cn.hidden = !(s.chordStatus === "none" || s.picked || s.chordStatus === "partial");
   cn.classList.toggle("warn", s.chordStatus === "none" && !s.picked);
-  cn.textContent = s.picked
-    ? s.pickNote
-    : s.chordStatus === "none"
+  cn.textContent = s.picked ? s.pickNote : s.chordStatus === "none"
     ? "Аккорды не добавлены: достоверную гармонию определить не удалось. Нужна проверка."
-    : "Аккорды указаны не для всех строк или только общей схемой. Требуют проверки.";
+    : (s.chordStatus === "partial" ? "Аккорды указаны не для всех строк или только общей схемой. Требуют проверки." : "");
   const src = $("srcNote");
   src.hidden = !s.sources;
   src.innerHTML = s.sources ? "Источник: " + s.sources.map(x => `<a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(x.name)}</a>`).join(", ") : "";
-  document.title = s.title + " — Песни и аккорды";
-  updateFavBtn(); updateSong();
+  setOG(s.title + " — Песни и аккорды", s.preview || "Текст и аккорды");
+  updateFavBtn();
+  updateSong();
+  updatePlayBar();
   window.scrollTo(0, 0);
 }
-
-function showCatalog(favOnly) {
+function hideAllViews(){ el.catalog.hidden = true; el.songView.hidden = true; el.planView.hidden = true; }
+function showCatalog(favOnly){
   const wasSong = !el.songView.hidden;
-  if (favOnly) state.filter = "fav";
-  else if (state.filter === "fav" && !wasSong) state.filter = "all";
-  el.songView.hidden = true; el.catalog.hidden = false;
+  if(favOnly) state.filter = "fav";
+  else if(state.filter === "fav" && !wasSong) state.filter = "all";
+  hideAllViews();
+  el.catalog.hidden = false;
   document.body.classList.remove("is-song");
   state.song = null;
-  document.title = "Песни и аккорды";
+  state.playing = null;
+  setOG("Песни и аккорды", "Тексты и аккорды для служения.");
   setNav(favOnly ? "fav" : "catalog");
   renderCatalog();
   window.scrollTo(0, wasSong ? state.scroll : 0);
+  stopScroll();
 }
-
-function setNav(name) {
+function setNav(name){
   document.querySelectorAll("[data-nav]").forEach(a => a.classList.toggle("active", a.dataset.nav === name));
 }
 
-function route() {
-  const h = location.hash.replace(/^#\/?/, "");
-  if (h.startsWith("song/")) openSong(decodeURIComponent(h.slice(5)));
-  else if (h === "fav") showCatalog(true);
-  else showCatalog(false);
-}
-window.addEventListener("hashchange", route);
-
-/* ==========================================================================
-   Управление песней
-   ========================================================================== */
-function transpose(d) {
-  if (!state.song || !state.song.hasChords) return;
-  state.shift = ((state.shift + d + 18) % 12) - 6;   /* диапазон от -6 до +5 */
+/* ===================== УПРАВЛЕНИЕ ===================== */
+function transpose(d){
+  if(!state.song || !state.song.hasChords) return;
+  state.shift = mod12(state.shift + d);
   updateSong();
 }
-function setFont(d) {
+function setFont(d){
   state.fs = Math.min(34, Math.max(13, state.fs + d));
   store.set("sc_fs", state.fs);
-  if (state.song) updateSong();
+  if(state.song) el.body.style.setProperty("--fs", state.fs + "px");
 }
-function toast(msg) {
-  const t = $("toast");
-  t.textContent = msg; t.classList.add("show");
-  clearTimeout(toast.id); toast.id = setTimeout(() => t.classList.remove("show"), 1800);
-}
-async function copySong() {
-  if (!state.song) return;
-  const text = toPlain(state.song, state.shift);
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch (e) {
+async function copySong(){
+  if(!state.song) return;
+  const s = state.song;
+  const shown = raw => transposeToken(raw, state.shift, state.useFlats, state.notation).text.replace(/\.+$/,"");
+  const lines = s.blocks.map(b => {
+    if(b.t === "blank") return "";
+    if(b.t === "sec") return b.s;
+    if(b.t === "lyr") return b.s;
+    if(b.t === "chords") return b.toks.map(k => shown(k.raw)).join(" ");
+    let cl = "";
+    b.toks.forEach(k => { while(cl.length < k.i) cl += " "; if(cl && !cl.endsWith(" ")) cl += " "; cl += shown(k.raw); });
+    return cl + "\n" + b.lyr;
+  });
+  const key = currentKey();
+  const text = s.title + (key ? `\nТональность: ${key}` : "") + (state.capo ? ` (каподастр ${state.capo})` : "") + "\n\n" + lines.join("\n");
+  try{ await navigator.clipboard.writeText(text); }
+  catch(e){
     const ta = document.createElement("textarea");
     ta.value = text; ta.style.cssText = "position:fixed;opacity:0";
     document.body.appendChild(ta); ta.select();
     let ok = false;
-    try { ok = document.execCommand("copy"); } catch (err) { ok = false; }
+    try{ ok = document.execCommand("copy"); }catch(err){ ok = false; }
     ta.remove();
-    if (!ok) return toast("Не удалось скопировать. Выделите текст вручную.");
+    if(!ok) return toast("Не удалось скопировать. Выделите текст вручную.");
   }
   toast("Текст скопирован");
+}
+async function shareSong(){
+  if(!state.song) return;
+  const s = state.song;
+  const key = currentKey();
+  const url = location.origin + location.pathname + "#/song/" + encodeURIComponent(s.id) + (s.key ? "?k=" + encodeURIComponent(key) : "");
+  if(navigator.share){
+    try{ await navigator.share({ title: s.title, url }); return; }catch(e){}
+  }
+  try{ await navigator.clipboard.writeText(url); toast("Ссылка скопирована"); }
+  catch(e){ toast(url); }
 }
 
 $("tUp").addEventListener("click", () => transpose(1));
 $("tDown").addEventListener("click", () => transpose(-1));
 $("tReset").addEventListener("click", () => { state.shift = 0; updateSong(); });
+$("flatsBtn").addEventListener("click", () => { state.useFlats = !state.useFlats; updateSong(); });
+$("keySelect").addEventListener("change", e => {
+  if(!state.song || !state.song.key) return;
+  const c = chordInfo(state.song.key);
+  if(!c) return;
+  state.shift = mod12(parseInt(e.target.value, 10) - parseNote(c.r, c.ra));
+  updateSong();
+});
+$("capoRange").addEventListener("input", e => { state.capo = parseInt(e.target.value, 10) || 0; updateCapoInfo(); saveSongState(); });
 $("fsUp").addEventListener("click", () => setFont(1));
 $("fsDown").addEventListener("click", () => setFont(-1));
+$("chordsToggle").addEventListener("click", () => { state.showChords = !state.showChords; store.set("sc_chords", state.showChords); updateSong(); });
+$("compactToggle").addEventListener("click", () => { state.compact = !state.compact; store.set("sc_compact", state.compact); updateSong(); });
+$("largeToggle").addEventListener("click", () => { state.large = !state.large; store.set("sc_large", state.large); updateSong(); });
 $("copyBtn").addEventListener("click", copySong);
+$("shareBtn").addEventListener("click", shareSong);
 $("favBtn").addEventListener("click", () => state.song && toggleFav(state.song.id));
-$("toTop").addEventListener("click", e => { e.preventDefault(); window.scrollTo({ top: 0, behavior: "smooth" }); });
+$("toTop").addEventListener("click", e => { e.preventDefault(); window.scrollTo({ top:0, behavior:"smooth" }); });
 
-document.addEventListener("keydown", e => {
-  if (e.ctrlKey || e.metaKey || e.altKey) return;
-  const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
-  if (e.key === "Escape") {
-    if (typing && document.activeElement === el.search && state.q) { el.clear.click(); return; }
-    if (!el.songView.hidden) location.hash = "#/";
-    return;
+$("fullBtn").addEventListener("click", async () => {
+  try{
+    if(!document.fullscreenElement){ await document.documentElement.requestFullscreen(); }
+    else await document.exitFullscreen();
+  }catch(e){ toast("Полноэкранный режим недоступен в этом браузере"); }
+});
+el.sections.addEventListener("click", e => {
+  const b = e.target.closest("[data-sec]");
+  if(b){ const t = document.getElementById(b.dataset.sec); if(t) t.scrollIntoView({ behavior:"smooth", block:"start" }); }
+});
+
+/* ===================== АВТОПРОКРУТКА ===================== */
+const AS = state.autoScroll;
+function setScrollBtn(){
+  $("scrollToggle").setAttribute("aria-pressed", AS.active);
+  $("scrollToggle").textContent = AS.active ? (AS.paused ? "▶ Продолжить" : "■ Стоп") : "▶ Прокрутка";
+}
+function tick(ts){
+  if(!AS.active) return;
+  if(!AS.last) AS.last = ts;
+  const dt = (ts - AS.last) / 1000; AS.last = ts;
+  if(!AS.paused){
+    window.scrollBy(0, AS.speed * dt);
+    const max = document.documentElement.scrollHeight - window.innerHeight;
+    if(window.scrollY >= max - 1){ stopScroll(); toast("Конец песни"); return; }
   }
-  if (typing) return;
-  if (e.key === "/" && !el.catalog.hidden) { e.preventDefault(); el.search.focus(); }
-  else if (!el.songView.hidden) {
-    if (e.key === "]") transpose(1);
-    else if (e.key === "[") transpose(-1);
-    else if (e.key === "=" || e.key === "+") setFont(1);
-    else if (e.key === "-") setFont(-1);
+  AS.raf = requestAnimationFrame(tick);
+}
+function startScroll(){
+  if(AS.active){ AS.paused = false; AS.last = 0; setScrollBtn(); return; }
+  AS.active = true; AS.paused = false; AS.last = 0;
+  AS.raf = requestAnimationFrame(tick);
+  setScrollBtn();
+}
+function stopScroll(){
+  AS.active = false; AS.paused = false;
+  cancelAnimationFrame(AS.raf); AS.raf = 0; AS.last = 0;
+  setScrollBtn();
+}
+$("scrollToggle").addEventListener("click", () => {
+  if(!AS.active) startScroll();
+  else if(AS.paused) startScroll();
+  else stopScroll();
+});
+$("scrollPause").addEventListener("click", () => {
+  if(!AS.active) return;
+  AS.paused = !AS.paused; AS.last = 0; setScrollBtn();
+});
+$("speedRange").addEventListener("input", e => {
+  AS.speed = parseInt(e.target.value, 10) || 30;
+  $("speedLabel").textContent = AS.speed;
+  store.set("sc_speed", AS.speed);
+});
+AS.speed = store.get("sc_speed", 30);
+$("speedRange").value = AS.speed; $("speedLabel").textContent = AS.speed;
+
+/* ===================== WAKE LOCK ===================== */
+let wakeLock = null, wakeWanted = false;
+function updateWakeBtn(){
+  const b = $("wakeBtn");
+  b.setAttribute("aria-pressed", !!wakeLock);
+  b.textContent = wakeLock ? "Экран не выключится" : "Не выключать экран";
+}
+async function requestWake(){
+  if(!("wakeLock" in navigator)){ toast("Браузер не поддерживает удержание экрана"); return false; }
+  try{
+    wakeLock = await navigator.wakeLock.request("screen");
+    wakeWanted = true;
+    wakeLock.addEventListener("release", () => { wakeLock = null; updateWakeBtn(); });
+    updateWakeBtn();
+    return true;
+  }catch(e){
+    toast("Не удалось включить удержание экрана");
+    wakeLock = null; updateWakeBtn(); return false;
+  }
+}
+async function releaseWake(){
+  wakeWanted = false;
+  try{ if(wakeLock) await wakeLock.release(); }catch(e){}
+  wakeLock = null; updateWakeBtn();
+}
+$("wakeBtn").addEventListener("click", () => {
+  if(wakeLock) releaseWake(); else requestWake();
+});
+document.addEventListener("visibilitychange", () => {
+  if(wakeWanted && !wakeLock && document.visibilityState === "visible") requestWake();
+});
+
+/* ===================== ИЗБРАННОЕ: ЭКСПОРТ/ИМПОРТ ===================== */
+function exportFav(){
+  download("favorites.json", JSON.stringify([...state.fav], null, 2));
+}
+function importFavFromFile(file){
+  const reader = new FileReader();
+  reader.onload = () => {
+    try{
+      const data = JSON.parse(reader.result);
+      if(!Array.isArray(data) || !data.every(x => typeof x === "string")) throw new Error("bad");
+      let added = 0;
+      data.forEach(id => { if(findSong(id) && !state.fav.has(id)){ state.fav.add(id); added++; } });
+      store.set("sc_fav", [...state.fav]);
+      renderCatalog();
+      toast(`Импорт избранного: добавлено ${added}`);
+    }catch(e){ toast("Некорректный файл избранного — данные не изменены"); }
+  };
+  reader.readAsText(file);
+}
+
+/* ===================== ПРОГРАММЫ СЛУЖЕНИЯ ===================== */
+let playlists = store.get("sc_playlists", []);
+function savePlaylists(){ store.set("sc_playlists", playlists); }
+const genId = () => "pl-" + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
+function showPlan(params){
+  hideAllViews(); el.planView.hidden = false; setNav("plan");
+  document.body.classList.remove("is-song");
+  state.song = null; state.playing = null;
+  if(params && params.get("p")){
+    try{
+      const data = JSON.parse(b64decode(params.get("p")));
+      if(Array.isArray(data)){
+        const items = data.map(x => {
+          const id = Array.isArray(x) ? x[0] : x;
+          const shift = Array.isArray(x) && typeof x[1] === "number" ? mod12(x[1]) : 0;
+          return findSong(id) ? { songId:id, shift } : null;
+        }).filter(Boolean);
+        if(items.length){
+          const pl = { id:genId(), name:"Импортированная программа", items, created:Date.now() };
+          playlists.push(pl); savePlaylists();
+          toast("Программа добавлена из ссылки");
+        }
+      }
+    }catch(e){ toast("Ссылка на программу повреждена"); }
+  }
+  renderPlanList();
+  if(playlists.length === 0) renderPlanEditor(null);
+  else if(!state.editingPlan) renderPlanEditor(playlists[playlists.length-1]);
+  setOG("Программа служения — Песни и аккорды");
+}
+function renderPlanList(){
+  $("planList").innerHTML = playlists.map(p => `
+    <div class="plan-card" data-pid="${p.id}">
+      <h3>${esc(p.name)}</h3>
+      <p>${p.items.length} песен</p>
+      <div class="row">
+        <button type="button" class="btn small" data-act="open" data-pid="${p.id}">Открыть</button>
+        <button type="button" class="btn small ghost" data-act="edit" data-pid="${p.id}">Изменить</button>
+        <button type="button" class="btn small ghost" data-act="share" data-pid="${p.id}">Ссылка</button>
+        <button type="button" class="btn small ghost" data-act="copy" data-pid="${p.id}">Копировать</button>
+        <button type="button" class="btn small danger" data-act="del" data-pid="${p.id}">Удалить</button>
+      </div>
+    </div>`).join("") || "<p>Программ пока нет. Создайте новую.</p>";
+}
+function playlistById(id){ return playlists.find(p => p.id === id); }
+function renderPlanEditor(pl){
+  state.editingPlan = pl;
+  const box = $("planEditor");
+  if(!pl){ box.hidden = true; box.innerHTML = ""; return; }
+  box.hidden = false;
+  const opts = SONGS.map(s => `<option value="${s.id}">${esc(s.title)}</option>`).join("");
+  box.innerHTML = `
+    <h2>${esc(pl.name)}</h2>
+    <label class="field"><span>Название программы</span>
+      <input id="planName" value="${esc(pl.name)}"></label>
+    <div id="planItems">${pl.items.map((it, i) => {
+      const s = findSong(it.songId);
+      if(!s) return "";
+      const c = s.key && chordInfo(s.key);
+      const minor = c && /^m(?!aj)/.test(c.q || "");
+      const cur = mod12(parseNote(c ? c.r : "C", c ? c.ra : "") + (it.shift || 0));
+      let keys = "";
+      for(let k = 0; k < 12; k++) keys += `<option value="${k}"${k===cur?" selected":""}>${noteName(k, false, state.notation)}${minor?"m":""}</option>`;
+      return `<div class="plan-item" data-i="${i}">
+        <span class="nm">${esc(s.title)}</span>
+        <select data-act="key" data-i="${i}" ${s.key?"":"disabled"}>${s.key?keys:'<option>—</option>'}</select>
+        <button type="button" data-act="up" data-i="${i}" ${i===0?"disabled":""} aria-label="Выше">↑</button>
+        <button type="button" data-act="down" data-i="${i}" ${i===pl.items.length-1?"disabled":""} aria-label="Ниже">↓</button>
+        <button type="button" data-act="rm" data-i="${i}" aria-label="Удалить">×</button>
+      </div>`;
+    }).join("")}</div>
+    <div class="plan-add">
+      <select id="planAddSelect">${opts}</select>
+      <button type="button" class="btn small" id="planAddBtn">Добавить песню</button>
+    </div>
+    <div class="row">
+      <button type="button" class="btn small" id="planOpenBtn">Открыть по порядку</button>
+      <button type="button" class="btn small ghost" id="planShareBtn">Ссылка</button>
+      <button type="button" class="btn small ghost" id="planExportBtn">Экспорт JSON</button>
+      <label class="btn small ghost">Импорт JSON<input type="file" id="planImport" accept="application/json" hidden></label>
+      <button type="button" class="btn small ghost" id="planCopyBtn">Копировать текст</button>
+    </div>`;
+  $("planName").addEventListener("input", e => { pl.name = e.target.value; savePlaylists(); renderPlanList(); });
+  $("planAddBtn").addEventListener("click", () => {
+    const id = $("planAddSelect").value;
+    const s = findSong(id);
+    if(s) pl.items.push({ songId:id, shift:0, useFlats:s.flats });
+    savePlaylists(); renderPlanEditor(pl);
+  });
+  $("planOpenBtn").addEventListener("click", () => openPlaylist(pl.id, 0));
+  $("planShareBtn").addEventListener("click", () => sharePlaylist(pl));
+  $("planExportBtn").addEventListener("click", () => download("playlist.json", JSON.stringify(pl, null, 2)));
+  $("planImport").addEventListener("change", e => importPlaylistFile(e.target.files[0]));
+  $("planCopyBtn").addEventListener("click", () => copyPlaylistText(pl));
+  $("planItems").addEventListener("click", e => {
+    const b = e.target.closest("[data-act]"); if(!b) return;
+    const i = parseInt(b.dataset.i, 10);
+    const act = b.dataset.act;
+    if(act === "up" && i > 0) [pl.items[i-1], pl.items[i]] = [pl.items[i], pl.items[i-1]];
+    else if(act === "down" && i < pl.items.length-1) [pl.items[i+1], pl.items[i]] = [pl.items[i], pl.items[i+1]];
+    else if(act === "rm") pl.items.splice(i, 1);
+    else return;
+    savePlaylists(); renderPlanEditor(pl);
+  });
+  $("planItems").addEventListener("change", e => {
+    const sel = e.target.closest('select[data-act="key"]'); if(!sel) return;
+    const i = parseInt(sel.dataset.i, 10);
+    const s = findSong(pl.items[i].songId);
+    const c = s.key && chordInfo(s.key);
+    if(c) pl.items[i].shift = mod12(parseInt(sel.value, 10) - parseNote(c.r, c.ra));
+    savePlaylists();
+  });
+}
+function openPlaylist(id, index){
+  const pl = playlistById(id); if(!pl || !pl.items.length) return toast("Программа пуста");
+  state.playing = { playlistId:id, index };
+  const it = pl.items[index];
+  if(!it) return;
+  const hash = "#/song/" + encodeURIComponent(it.songId);
+  if(location.hash === hash) openSong(it.songId); else location.hash = hash;
+}
+function updatePlayBar(){
+  const bar = $("playBar");
+  if(!state.playing){ bar.hidden = true; return; }
+  const pl = playlistById(state.playing.playlistId);
+  if(!pl){ bar.hidden = true; return; }
+  bar.hidden = false;
+  $("playInfo").textContent = `${state.playing.index + 1} / ${pl.items.length} — ${esc(pl.name)}`;
+  $("playPrev").disabled = state.playing.index <= 0;
+  $("playNext").disabled = state.playing.index >= pl.items.length - 1;
+}
+$("playPrev").addEventListener("click", () => {
+  if(!state.playing) return;
+  openPlaylist(state.playing.playlistId, Math.max(0, state.playing.index - 1));
+});
+$("playNext").addEventListener("click", () => {
+  if(!state.playing) return;
+  const pl = playlistById(state.playing.playlistId);
+  openPlaylist(state.playing.playlistId, Math.min(pl.items.length - 1, state.playing.index + 1));
+});
+$("playExit").addEventListener("click", () => { state.playing = null; updatePlayBar(); });
+function sharePlaylist(pl){
+  const data = pl.items.map(it => [it.songId, it.shift || 0]);
+  const code = b64encode(JSON.stringify(data));
+  const url = location.origin + location.pathname + "#/plan?p=" + code;
+  if(url.length > 1800){ toast("Программа слишком большая для ссылки — используйте экспорт JSON"); return; }
+  navigator.clipboard.writeText(url).then(() => toast("Ссылка на программу скопирована")).catch(() => toast(url));
+}
+function copyPlaylistText(pl){
+  const lines = pl.items.map((it, i) => {
+    const s = findSong(it.songId); if(!s) return "";
+    const c = s.key && chordInfo(s.key);
+    const k = c ? noteName(parseNote(c.r,c.ra) + (it.shift||0), false, state.notation) : "";
+    return `${i+1}. ${s.title}${k ? " — " + k : ""}`;
+  });
+  navigator.clipboard.writeText(pl.name + "\n\n" + lines.join("\n")).then(() => toast("Программа скопирована")).catch(() => toast("Не удалось скопировать"));
+}
+function importPlaylistFile(file){
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try{
+      const data = JSON.parse(reader.result);
+      if(!data || !Array.isArray(data.items)) throw new Error("bad");
+      const items = data.items.map(it => {
+        if(!it || !findSong(it.songId)) return null;
+        return { songId: it.songId, shift: typeof it.shift === "number" ? mod12(it.shift) : 0 };
+      }).filter(Boolean);
+      if(!items.length) throw new Error("empty");
+      playlists.push({ id:genId(), name: String(data.name || "Импорт"), items, created:Date.now() });
+      savePlaylists(); renderPlanList(); toast("Программа импортирована");
+    }catch(e){ toast("Некорректный файл программы"); }
+  };
+  reader.readAsText(file);
+}
+$("newPlanBtn").addEventListener("click", () => {
+  const pl = { id:genId(), name:"Новая программа", items:[], created:Date.now() };
+  playlists.push(pl); savePlaylists(); renderPlanList(); renderPlanEditor(pl);
+});
+$("planList").addEventListener("click", e => {
+  const b = e.target.closest("[data-act]"); if(!b) return;
+  const pl = playlistById(b.dataset.pid); if(!pl) return;
+  const act = b.dataset.act;
+  if(act === "open") openPlaylist(pl.id, 0);
+  else if(act === "edit") renderPlanEditor(pl);
+  else if(act === "share") sharePlaylist(pl);
+  else if(act === "copy") copyPlaylistText(pl);
+  else if(act === "del"){
+    if(confirm("Удалить программу «" + pl.name + "»?")){
+      playlists = playlists.filter(p => p.id !== pl.id); savePlaylists(); renderPlanList();
+      if(state.editingPlan && state.editingPlan.id === pl.id) renderPlanEditor(null);
+    }
   }
 });
 
-/* ==========================================================================
-   Запуск
-   ========================================================================== */
+/* ===================== НАСТРОЙКИ ===================== */
+function openModal(title, html){
+  $("modalTitle").textContent = title;
+  $("modalBody").innerHTML = html;
+  $("modal").hidden = false;
+  document.body.style.overflow = "hidden";
+}
+function closeModal(){
+  $("modal").hidden = true;
+  document.body.style.overflow = "";
+}
+$("modal").addEventListener("click", e => { if(e.target.closest("[data-close]")) closeModal(); });
+$("settingsBtn").addEventListener("click", () => {
+  openModal("Настройки", `
+    <h3>Система обозначений аккордов</h3>
+    <label class="row"><input type="radio" name="notation" value="intl" ${state.notation==="intl"?"checked":""}> Международная (B = си, Bb = си-бемоль)</label>
+    <label class="row"><input type="radio" name="notation" value="german" ${state.notation==="german"?"checked":""}> Немецкая (H = си, B = си-бемоль)</label>
+    <hr>
+    <h3>Избранное</h3>
+    <div class="row">
+      <button type="button" class="btn small" id="setExportFav">Экспорт JSON</button>
+      <label class="btn small ghost">Импорт JSON<input type="file" id="setImportFav" accept="application/json" hidden></label>
+    </div>
+    <hr>
+    <h3>Инструменты</h3>
+    <div class="row">
+      <button type="button" class="btn small" id="setAddSong">Добавить песню</button>
+      <button type="button" class="btn small ghost" id="setDiag">Диагностика каталога</button>
+      <button type="button" class="btn small danger" id="setReset">Сбросить настройки</button>
+    </div>
+    <p class="result-info">Настройки хранятся в localStorage этого браузера и не синхронизируются между устройствами.</p>
+  `);
+  document.querySelectorAll('input[name="notation"]').forEach(r => r.addEventListener("change", () => {
+    state.notation = r.value; store.set("sc_notation", state.notation);
+    if(state.song) updateSong();
+    toast("Система обозначений: " + (state.notation === "german" ? "немецкая" : "международная"));
+  }));
+  $("setExportFav").addEventListener("click", exportFav);
+  $("setImportFav").addEventListener("change", e => { if(e.target.files[0]) importFavFromFile(e.target.files[0]); });
+  $("setAddSong").addEventListener("click", openAddSongForm);
+  $("setDiag").addEventListener("click", openDiagnostics);
+  $("setReset").addEventListener("click", () => {
+    if(confirm("Сбросить все настройки, избранное и программы?")){
+      ["sc_fav","sc_theme","sc_fs","sc_notation","sc_chords","sc_compact","sc_large","sc_playlists","sc_user_songs","sc_speed"]
+        .forEach(k => store.del(k));
+      state.fav.clear(); playlists = []; savePlaylists();
+      toast("Настройки сброшены"); closeModal(); renderCatalog();
+    }
+  });
+});
+
+/* ===================== ФОРМА ДОБАВЛЕНИЯ ПЕСНИ ===================== */
+function openAddSongForm(){
+  openModal("Добавить песню", `
+    <label class="field"><span>Название *</span><input id="addTitle"></label>
+    <label class="field"><span>Язык</span>
+      <select id="addLang"><option value="ru">Русский</option><option value="kk">Қазақша</option><option value="kk+ru">Қазақша + Русский</option><option value="en">English</option></select></label>
+    <label class="field"><span>Тональность (необязательно)</span><input id="addKey" placeholder="например G, Am, Bb"></label>
+    <label class="field"><span>Автор (необязательно)</span><input id="addAuthor"></label>
+    <label class="field"><span>Текст с аккордами * (аккорды строкой над текстом)</span><textarea id="addText" rows="12"></textarea></label>
+    <div class="row">
+      <button type="button" class="btn small" id="addPreview">Предпросмотр</button>
+      <button type="button" class="btn small" id="addSave">Сохранить локально</button>
+      <button type="button" class="btn small ghost" id="addGen">Сгенерировать код</button>
+    </div>
+    <p class="err" id="addErr" hidden></p>
+    <div id="addPreviewBox"></div>
+    <div id="addCodeBox"></div>
+  `);
+  const title = $("addTitle"), lang = $("addLang"), key = $("addKey"), author = $("addAuthor"), text = $("addText"), err = $("addErr");
+  const collect = () => ({
+    title: title.value.trim(), lang: lang.value, key: key.value.trim(), author: author.value.trim(), text: text.value
+  });
+  const validate = (data, allowEmptyText) => {
+    if(!data.title) return "Введите название";
+    if(!allowEmptyText && !data.text.trim()) return "Введите текст";
+    if(data.key && !chordInfo(data.key)) return "Некорректная тональность";
+    const dup = SONGS.find(s => norm(s.title) === norm(data.title));
+    if(dup) return "Возможный дубликат: «" + dup.title + "». Измените название, если это другая песня.";
+    return "";
+  };
+  $("addPreview").addEventListener("click", () => {
+    const data = collect(); const e = validate(data, false);
+    err.hidden = !e; err.textContent = e; $("addPreviewBox").innerHTML = ""; if(e) return;
+    const blocks = parseSong(data.text);
+    const fake = { blocks, flats: usesFlats(blocks) };
+    const saved = { shift:state.shift, useFlats:state.useFlats, notation:state.notation };
+    state.shift = 0; state.useFlats = fake.flats; state.notation = "intl"; state.song = { key: data.key, blocks };
+    const { html } = renderBody(fake);
+    state.shift = saved.shift; state.useFlats = saved.useFlats; state.notation = saved.notation;
+    $("addPreviewBox").innerHTML = `<div class="preview-box">${html}</div>`;
+  });
+  $("addSave").addEventListener("click", () => {
+    const data = collect(); const e = validate(data, false);
+    err.hidden = !e; err.textContent = e; if(e) return;
+    const id = "user-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2,6);
+    const song = { id, title:data.title, lang:data.lang, text:data.text, user:true };
+    if(data.key) song.key = data.key;
+    if(data.author) song.author = data.author;
+    const arr = store.get("sc_user_songs", []); arr.push(song); store.set("sc_user_songs", arr);
+    SONGS.push(song); prepareSongs();
+    toast("Песня сохранена локально"); closeModal(); renderCatalog();
+  });
+  $("addGen").addEventListener("click", () => {
+    const data = collect(); const e = validate(data, false);
+    err.hidden = !e; err.textContent = e; if(e) return;
+    const id = "user-" + Date.now().toString(36);
+    const song = { id, title:data.title, lang:data.lang, text:data.text };
+    if(data.key) song.key = data.key;
+    if(data.author) song.author = data.author;
+    const block = `{ id: ${JSON.stringify(song.id)}, title: ${JSON.stringify(song.title)}, lang: ${JSON.stringify(song.lang)}` +
+      (song.key ? `, key: ${JSON.stringify(song.key)}` : "") +
+      (song.author ? `, author: ${JSON.stringify(song.author)}` : "") +
+      `, text: ${JSON.stringify(song.text)} }`;
+    $("addCodeBox").innerHTML = `<p class="okmsg">Вставьте блок в массив SONGS в script.js:</p><pre class="code">${esc(block)}</pre>
+      <button type="button" class="btn small" id="copyBlock">Копировать блок</button>`;
+    $("copyBlock").addEventListener("click", () => {
+      navigator.clipboard.writeText(block).then(() => toast("Блок скопирован")).catch(() => toast("Не удалось скопировать"));
+    });
+  });
+}
+
+/* ===================== ДИАГНОСТИКА ===================== */
+function openDiagnostics(){
+  const issues = [];
+  const ids = new Map(), titles = new Map();
+  SONGS.forEach(s => {
+    if(!s.title || !s.title.trim()) issues.push({ type:"err", song:s, msg:"Пустое название" });
+    if(ids.has(s.id)) issues.push({ type:"err", song:s, msg:"Повторяющийся id: " + s.id });
+    ids.set(s.id, true);
+    const nt = norm(s.title || "");
+    if(nt){
+      if(titles.has(nt)) issues.push({ type:"warn", song:s, msg:"Возможный дубликат по названию: «" + titles.get(nt).title + "»" });
+      else titles.set(nt, s);
+    }
+    if(!s.blocks.some(b => b.t === "lyr" || b.t === "pair")) issues.push({ type:"warn", song:s, msg:"Нет текста (только аккорды или пусто)" });
+    if(!s.hasChords) issues.push({ type:"warn", song:s, msg:"Нет аккордов" });
+    if(s.chordStatus === "partial") issues.push({ type:"warn", song:s, msg:"Аккорды указаны не для всех строк" });
+    if(s.blocks.some(b => b.toks && b.toks.some(k => ODD_RE.test(splitToken(k.raw).core))))
+      issues.push({ type:"warn", song:s, msg:"Есть нестандартные/некорректные обозначения аккордов" });
+    if(s.key && !chordInfo(s.key)) issues.push({ type:"warn", song:s, msg:"Некорректная тональность: " + s.key });
+  });
+  const bySong = new Map();
+  issues.forEach(it => { const k = it.song.id; if(!bySong.has(k)) bySong.set(k, []); bySong.get(k).push(it); });
+  const html = bySong.size
+    ? [...bySong.values()].map(arr => arr.map(it => `<div class="diag-item ${it.type==="err"?"":"ok"}"><b>${esc(it.song.title)}</b> — ${esc(it.msg)}</div>`).join("")).join("")
+    : '<div class="diag-item ok">Критических проблем не найдено.</div>';
+  openModal("Диагностика каталога", `<p class="result-info">Песен в каталоге: ${SONGS.length}. Проблемных песен: ${bySong.size}.</p>${html}`);
+}
+
+/* ===================== РОУТИНГ ===================== */
+function route(){
+  const raw = location.hash.replace(/^#\/?/, "");
+  const qi = raw.indexOf("?");
+  const path = qi >= 0 ? raw.slice(0, qi) : raw;
+  const params = new URLSearchParams(qi >= 0 ? raw.slice(qi + 1) : "");
+  if(path.startsWith("song/")) openSong(decodeURIComponent(path.slice(5)), params);
+  else if(path === "fav") showCatalog(true);
+  else if(path === "plan") showPlan(params);
+  else showCatalog(false);
+}
+window.addEventListener("hashchange", route);
+
+/* ===================== КЛАВИАТУРА ===================== */
+document.addEventListener("keydown", e => {
+  if(e.ctrlKey || e.metaKey || e.altKey) return;
+  const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
+  if(e.key === "Escape"){
+    if(!$("modal").hidden){ closeModal(); return; }
+    if(typing && document.activeElement === el.search && state.q){ el.clear.click(); return; }
+    if(!el.songView.hidden) location.hash = "#/";
+    return;
+  }
+  if(typing) return;
+  if(e.key === "/" && !el.catalog.hidden){ e.preventDefault(); el.search.focus(); }
+  else if(!el.songView.hidden){
+    if(e.key === "]") transpose(1);
+    else if(e.key === "[") transpose(-1);
+    else if(e.key === "=" || e.key === "+") setFont(1);
+    else if(e.key === "-") setFont(-1);
+    else if(e.key === "s"){ e.preventDefault(); if(AS.active && !AS.paused) stopScroll(); else startScroll(); }
+    else if(e.key === "p"){ if(AS.active){ AS.paused = !AS.paused; AS.last = 0; setScrollBtn(); } }
+  }
+});
+
+/* ===================== ИНИЦИАЛИЗАЦИЯ ===================== */
+fillKeyFilter();
+renderCatalog();
 route();
+setScrollBtn();
+updateWakeBtn();
