@@ -3,9 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#f3f5f7">
-<meta name="description" content="Тексты песен и аккорды: поиск, транспонирование, избранное.">
+<meta name="theme-color" content="#F5F1EA">
+<meta name="description" content="Тексты песен и аккорды: поиск, транспонирование, каподастр, избранное, программы служения.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Песни и аккорды">
+<meta property="og:description" content="Тексты и аккорды для служения. Транспонирование, каподастр, автопрокрутка.">
+<meta property="og:site_name" content="Песни и аккорды">
 <title>Песни и аккорды</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23583030'/%3E%3Ctext x='16' y='23' font-size='20' text-anchor='middle' fill='%23F8ECEC'%3E%E2%99%AA%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -15,31 +20,39 @@
   </a>
   <nav class="nav" aria-label="Основная навигация">
     <a href="#/" data-nav="catalog">Каталог</a>
+    <a href="#/plan" data-nav="plan">Служение</a>
     <a href="#/fav" data-nav="fav">Избранное <span class="badge" id="favCount">0</span></a>
+    <button type="button" class="icon-btn" id="settingsBtn" aria-label="Настройки">⚙</button>
     <button type="button" class="icon-btn" id="themeBtn" aria-label="Переключить тему"></button>
   </nav>
 </header>
 
 <main id="main">
+  <!-- КАТАЛОГ -->
   <section id="catalogView" class="view">
     <div class="hero">
       <h1>Песни и аккорды</h1>
       <p class="hero-sub">Тексты и аккорды для служения. Найдите песню, выберите тональность и играйте.</p>
       <label class="search" for="searchInput">
         <span class="search-ico" aria-hidden="true">⌕</span>
-        <input id="searchInput" type="search" placeholder="Название или строка из песни" autocomplete="off" enterkeyhint="search">
+        <input id="searchInput" type="search" placeholder="Название, автор или строка из песни" autocomplete="off" enterkeyhint="search">
         <button type="button" id="clearSearch" class="clear" aria-label="Очистить поиск" hidden>×</button>
       </label>
     </div>
 
     <div class="controls">
       <div class="chips" id="chips" role="group" aria-label="Фильтры"></div>
-      <label class="sort">Сортировка
-        <select id="sortSelect">
-          <option value="alpha">По алфавиту</option>
-          <option value="added">По порядку добавления</option>
-        </select>
-      </label>
+      <div class="filter-row">
+        <label class="sort">Тональность
+          <select id="keyFilter"><option value="">Любая</option></select>
+        </label>
+        <label class="sort">Сортировка
+          <select id="sortSelect">
+            <option value="alpha">По алфавиту</option>
+            <option value="added">По порядку добавления</option>
+          </select>
+        </label>
+      </div>
     </div>
     <p class="result-info" id="resultInfo" aria-live="polite"></p>
     <div class="grid" id="grid"></div>
@@ -49,34 +62,80 @@
     </div>
   </section>
 
+  <!-- ПЕСНЯ -->
   <section id="songView" class="view" hidden>
     <div class="song-head">
       <a class="btn ghost" href="#/" id="backBtn">‹ Каталог</a>
       <div class="song-actions">
         <button type="button" class="icon-btn" id="favBtn" aria-pressed="false" aria-label="В избранное">☆</button>
         <button type="button" class="icon-btn" id="copyBtn" aria-label="Скопировать текст">⧉</button>
+        <button type="button" class="icon-btn" id="shareBtn" aria-label="Поделиться песней">↗</button>
       </div>
     </div>
+
+    <div class="playbar" id="playBar" hidden>
+      <button type="button" id="playPrev" class="tbtn" aria-label="Предыдущая песня">‹</button>
+      <span id="playInfo"></span>
+      <button type="button" id="playNext" class="tbtn" aria-label="Следующая песня">›</button>
+      <button type="button" id="playExit" class="tbtn" aria-label="Выйти из программы">×</button>
+    </div>
+
     <div class="toolbar" role="toolbar" aria-label="Настройки песни">
       <div class="tgroup" aria-label="Транспонирование">
         <button type="button" class="tbtn" id="tDown" aria-label="Тональность на полтона ниже">♭</button>
         <button type="button" class="tbtn key" id="tReset" aria-label="Вернуть исходную тональность"><span id="tKey"></span><small id="tShift"></small></button>
         <button type="button" class="tbtn" id="tUp" aria-label="Тональность на полтона выше">♯</button>
       </div>
+      <div class="tgroup" aria-label="Выбор тональности">
+        <label class="tinylbl">Тональность <select id="keySelect"></select></label>
+        <button type="button" class="tbtn" id="flatsBtn" aria-label="Переключить диезы/бемоли">♭/♯</button>
+      </div>
+      <div class="tgroup" aria-label="Каподастр">
+        <label class="tinylbl">Каподастр <input type="range" id="capoRange" min="0" max="11" step="1" value="0"></label>
+        <span class="capo-info" id="capoInfo"></span>
+      </div>
       <div class="tgroup" aria-label="Размер текста">
         <button type="button" class="tbtn" id="fsDown" aria-label="Уменьшить текст">A−</button>
         <button type="button" class="tbtn" id="fsUp" aria-label="Увеличить текст">A+</button>
       </div>
+      <div class="tgroup" aria-label="Отображение">
+        <button type="button" class="tbtn" id="chordsToggle" aria-pressed="true" aria-label="Показать/скрыть аккорды">Аккорды</button>
+        <button type="button" class="tbtn" id="compactToggle" aria-pressed="false" aria-label="Компактный режим">Компактно</button>
+        <button type="button" class="tbtn" id="largeToggle" aria-pressed="false" aria-label="Крупный режим">Крупно</button>
+        <button type="button" class="tbtn" id="fullBtn" aria-label="Полноэкранный режим">⛶</button>
+      </div>
+      <div class="tgroup" aria-label="Автопрокрутка">
+        <button type="button" class="tbtn" id="scrollToggle" aria-pressed="false">▶ Прокрутка</button>
+        <button type="button" class="tbtn" id="scrollPause" aria-label="Пауза">⏸</button>
+        <label class="tinylbl">Скорость <input type="range" id="speedRange" min="5" max="200" step="1" value="30"> <span id="speedLabel">30</span></label>
+      </div>
+      <div class="tgroup" aria-label="Экран">
+        <button type="button" class="tbtn" id="wakeBtn" aria-pressed="false">Не выключать экран</button>
+      </div>
     </div>
-    <article class="song">
-      <h2 id="songTitle"></h2>
-      <p class="song-meta" id="songMeta"></p>
-      <p class="notice" id="noTextNote" hidden>Текст не добавлен. Есть только аккорды. Полный текст и аккорды в надёжных источниках подтвердить не удалось.</p>
-      <p class="notice" id="srcNote" hidden></p>
-      <p class="notice warn" id="chordNote" hidden></p>
-      <p class="notice warn" id="ambNote" hidden>Аккорды с H и нестандартной записью не изменены при транспонировании. Они подсвечены.</p>
-      <div class="song-body" id="songBody"></div>
-    </article>
+
+    <div class="song-wrap">
+      <article class="song">
+        <h2 id="songTitle"></h2>
+        <p class="song-meta" id="songMeta"></p>
+        <p class="notice" id="noTextNote" hidden>Текст не добавлен. Есть только аккорды.</p>
+        <p class="notice" id="srcNote" hidden></p>
+        <p class="notice warn" id="chordNote" hidden></p>
+        <p class="notice warn" id="ambNote" hidden>Часть аккордов не удалось надёжно распознать — они оставлены без изменений и подсвечены.</p>
+        <div class="song-body" id="songBody"></div>
+      </article>
+      <aside class="sections" id="sectionsList" aria-label="Разделы песни"></aside>
+    </div>
+  </section>
+
+  <!-- ПРОГРАММА СЛУЖЕНИЯ -->
+  <section id="planView" class="view" hidden>
+    <div class="plan-head">
+      <h1>Программа служения</h1>
+      <button type="button" class="btn" id="newPlanBtn">Новая программа</button>
+    </div>
+    <div id="planList" class="plan-list"></div>
+    <div id="planEditor" class="plan-editor" hidden></div>
   </section>
 </main>
 
@@ -87,11 +146,24 @@
   </div>
   <nav aria-label="Дополнительная навигация">
     <a href="#/">Каталог</a>
+    <a href="#/plan">Служение</a>
     <a href="#/fav">Избранное</a>
     <a href="#" id="toTop">Наверх</a>
   </nav>
-  <p class="keys">Клавиши: <kbd>/</kbd> поиск, <kbd>[</kbd> <kbd>]</kbd> тональность, <kbd>−</kbd> <kbd>=</kbd> размер, <kbd>Esc</kbd> назад.</p>
+  <p class="keys">Клавиши: <kbd>/</kbd> поиск, <kbd>[</kbd> <kbd>]</kbd> тональность, <kbd>−</kbd> <kbd>=</kbd> размер, <kbd>s</kbd> прокрутка, <kbd>p</kbd> пауза, <kbd>Esc</kbd> назад.</p>
 </footer>
+
+<div class="modal" id="modal" hidden>
+  <div class="modal-bg" data-close></div>
+  <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-head">
+      <h2 id="modalTitle"></h2>
+      <button type="button" class="icon-btn" data-close aria-label="Закрыть">×</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script src="script.js"></script>
 </body>
