@@ -149,8 +149,84 @@ body.large .song-body{--fs:24px;line-height:1.5}
   body.large .ln,body.large .sec{break-inside:avoid}
 }
 
-/* ====== ПАНЕЛЬ ИНСТРУМЕНТОВ ====== */
-.toolbar{position:fixed;left:0;right:0;bottom:0;z-index:30;display:flex;flex-wrap:wrap;justify-content:center;gap:8px;padding:8px 12px calc(8px + env(safe-area-inset-bottom));background:var(--surface);border-top:1px solid var(--line);box-shadow:0 -6px 20px rgba(0,0,0,.14);max-height:44vh;overflow-y:auto}
+/* ====== НОВАЯ ПАНЕЛЬ ИНСТРУМЕНТОВ ====== */
+.toolbar-wrapper {
+  display: none; /* Скрыта по умолчанию, показывается через body.is-song */
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  width: 100%;
+}
+body.is-song .toolbar-wrapper {
+  display: flex;
+}
+.toolbar {
+  position: static;
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  box-shadow: 0 -6px 20px rgba(0,0,0,.14);
+  max-height: 50vh;
+  overflow-y: auto;
+  pointer-events: auto;
+  border-radius: 16px 16px 0 0;
+}
+@media (min-width: 900px) {
+  .toolbar-wrapper {
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  .toolbar {
+    border-left: 1px solid var(--line);
+    border-right: 1px solid var(--line);
+  }
+}
+.toolbar-toggle {
+  pointer-events: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-bottom: none;
+  border-radius: 12px 12px 0 0;
+  padding: 6px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  box-shadow: 0 -4px 10px rgba(0,0,0,0.1);
+  margin-bottom: -1px;
+  z-index: 1;
+  display: block;
+}
+@media (min-width: 900px) {
+  .toolbar-toggle {
+    border-left: 1px solid var(--line);
+    border-right: 1px solid var(--line);
+  }
+}
+body.toolbar-closed .toolbar-wrapper {
+  transform: translateY(calc(100% - 34px));
+}
+body.toolbar-closed .toolbar {
+  opacity: 0;
+  pointer-events: none;
+}
+body.toolbar-closed .toolbar-toggle {
+  background: var(--brand);
+  color: var(--brand-ink);
+  border-color: var(--brand);
+}
+
 .tgroup{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
 .tbtn{min-width:48px;height:48px;padding:0 10px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);font:700 15px var(--sans);cursor:pointer;touch-action:manipulation}
 .tbtn:active{background:var(--chip)}
@@ -163,8 +239,6 @@ body.large .song-body{--fs:24px;line-height:1.5}
 .tinylbl select{min-height:40px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:14px var(--sans);padding:0 8px;max-width:110px}
 .tinylbl input[type="range"]{width:100px}
 .capo-info{font-size:12px;color:var(--muted);max-width:150px;line-height:1.2}
-
-.toolbar-toggle { display: none; }
 
 .sections{display:none;position:sticky;top:80px;width:180px;flex:none;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px;max-height:70vh;overflow:auto}
 .sections h3{margin:0 0 8px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
@@ -224,12 +298,10 @@ pre.code{background:var(--bg);border:1px solid var(--line);border-radius:10px;pa
 @media (max-width:760px){
   main{padding:0 12px 24px}
   .hero{padding-top:20px}
-  .logo-text{display:none} /* Скрываем текст, оставляем только иконку для экономии места */
+  .logo-text{display:none} 
   
-  /* Скрываем десктопную навигацию в шапке */
   .desktop-nav { display: none; }
 
-  /* Показываем нижнюю навигацию */
   .mobile-nav {
     display: flex;
     justify-content: space-around;
@@ -256,9 +328,7 @@ pre.code{background:var(--bg);border:1px solid var(--line);border-radius:10px;pa
   }
   .mobile-nav a.active { color: var(--brand); }
   
-  /* Прячем нижнюю навигацию, когда открыта песня (там своя панель) */
   body.is-song .mobile-nav { display: none; }
-  /* Добавляем отступ снизу для контента, чтобы не перекрывала навигация */
   body:not(.is-song) main { padding-bottom: 80px; }
 
   .sort{width:100%}.sort select{flex:1;max-width:none}
@@ -266,54 +336,6 @@ pre.code{background:var(--bg);border:1px solid var(--line);border-radius:10px;pa
   .song{padding:16px 12px 24px;border-radius:12px;border-left:0;border-right:0;margin-left:-12px;margin-right:-12px;max-width:none;box-shadow:none}
   .grid{grid-template-columns:1fr}
   .tbtn{min-width:44px;height:44px;font-size:14px}
-
-  /* ====== СВОРАЧИВАЕМАЯ ПАНЕЛЬ (МОБИЛЬНЫЕ) ====== */
-  .toolbar-wrapper {
-    position: fixed;
-    bottom: 0; left: 0; right: 0;
-    z-index: 30;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    pointer-events: none;
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-  .toolbar-wrapper .toolbar {
-    position: static;
-    width: 100%;
-    pointer-events: auto;
-    max-height: 60vh;
-    overflow-y: auto;
-    justify-content: flex-start;
-  }
-  .toolbar-toggle {
-    display: block;
-    pointer-events: auto;
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-bottom: none;
-    border-radius: 12px 12px 0 0;
-    padding: 6px 20px;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--muted);
-    cursor: pointer;
-    box-shadow: 0 -4px 10px rgba(0,0,0,0.1);
-    margin-bottom: -1px;
-    z-index: 1;
-  }
-  body.toolbar-closed .toolbar-wrapper {
-    transform: translateY(calc(100% - 34px));
-  }
-  body.toolbar-closed .toolbar {
-    opacity: 0;
-    pointer-events: none;
-  }
-  body.toolbar-closed .toolbar-toggle {
-    background: var(--brand);
-    color: var(--brand-ink);
-    border-color: var(--brand);
-  }
 }
 
 @media (min-width:761px){
