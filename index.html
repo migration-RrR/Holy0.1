@@ -10,7 +10,7 @@
 <meta property="og:description" content="Тексты и аккорды для служения. Транспонирование, каподастр, автопрокрутка.">
 <meta property="og:site_name" content="Песни и аккорды">
 <title>Песни и аккорды</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23583030'/%3E%3Ctext x='16' y='23' font-size='20' text-anchor='middle' fill='%23F8ECEC'%3E%E2%99%AA%3C/text%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%237D5A44'/%3E%3Ctext x='16' y='23' font-size='20' text-anchor='middle' fill='%23F5F1EA'%3E%E2%99%AA%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -18,13 +18,15 @@
   <a class="logo" href="#/" aria-label="Песни и аккорды — каталог">
     <span class="logo-mark" aria-hidden="true">♪</span><span class="logo-text">Песни и аккорды</span>
   </a>
-  <nav class="nav" aria-label="Основная навигация">
+  <nav class="nav desktop-nav" aria-label="Основная навигация">
     <a href="#/" data-nav="catalog">Каталог</a>
     <a href="#/plan" data-nav="plan">Служение</a>
     <a href="#/fav" data-nav="fav">Избранное <span class="badge" id="favCount">0</span></a>
+  </nav>
+  <div class="header-actions">
     <button type="button" class="icon-btn" id="settingsBtn" aria-label="Настройки">⚙</button>
     <button type="button" class="icon-btn" id="themeBtn" aria-label="Переключить тему"></button>
-  </nav>
+  </div>
 </header>
 
 <main id="main">
@@ -35,7 +37,7 @@
       <p class="hero-sub">Тексты и аккорды для служения. Найдите песню, выберите тональность и играйте.</p>
       <label class="search" for="searchInput">
         <span class="search-ico" aria-hidden="true">⌕</span>
-        <input id="searchInput" type="search" placeholder="Название, автор или строка из песни" autocomplete="off" enterkeyhint="search">
+        <input id="searchInput" type="search" placeholder="Название, автор или строка" autocomplete="off" enterkeyhint="search">
         <button type="button" id="clearSearch" class="clear" aria-label="Очистить поиск" hidden>×</button>
       </label>
     </div>
@@ -80,37 +82,42 @@
       <button type="button" id="playExit" class="tbtn" aria-label="Выйти из программы">×</button>
     </div>
 
-    <div class="toolbar" role="toolbar" aria-label="Настройки песни">
-      <div class="tgroup" aria-label="Транспонирование">
-        <button type="button" class="tbtn" id="tDown" aria-label="Тональность на полтона ниже">♭</button>
-        <button type="button" class="tbtn key" id="tReset" aria-label="Вернуть исходную тональность"><span id="tKey"></span><small id="tShift"></small></button>
-        <button type="button" class="tbtn" id="tUp" aria-label="Тональность на полтона выше">♯</button>
-      </div>
-      <div class="tgroup" aria-label="Выбор тональности">
-        <label class="tinylbl">Тональность <select id="keySelect"></select></label>
-        <button type="button" class="tbtn" id="flatsBtn" aria-label="Переключить диезы/бемоли">♭/♯</button>
-      </div>
-      <div class="tgroup" aria-label="Каподастр">
-        <label class="tinylbl">Каподастр <input type="range" id="capoRange" min="0" max="11" step="1" value="0"></label>
-        <span class="capo-info" id="capoInfo"></span>
-      </div>
-      <div class="tgroup" aria-label="Размер текста">
-        <button type="button" class="tbtn" id="fsDown" aria-label="Уменьшить текст">A−</button>
-        <button type="button" class="tbtn" id="fsUp" aria-label="Увеличить текст">A+</button>
-      </div>
-      <div class="tgroup" aria-label="Отображение">
-        <button type="button" class="tbtn" id="chordsToggle" aria-pressed="true" aria-label="Показать/скрыть аккорды">Аккорды</button>
-        <button type="button" class="tbtn" id="compactToggle" aria-pressed="false" aria-label="Компактный режим">Компактно</button>
-        <button type="button" class="tbtn" id="largeToggle" aria-pressed="false" aria-label="Крупный режим">Крупно</button>
-        <button type="button" class="tbtn" id="fullBtn" aria-label="Полноэкранный режим">⛶</button>
-      </div>
-      <div class="tgroup" aria-label="Автопрокрутка">
-        <button type="button" class="tbtn" id="scrollToggle" aria-pressed="false">▶ Прокрутка</button>
-        <button type="button" class="tbtn" id="scrollPause" aria-label="Пауза">⏸</button>
-        <label class="tinylbl">Скорость <input type="range" id="speedRange" min="5" max="200" step="1" value="30"> <span id="speedLabel">30</span></label>
-      </div>
-      <div class="tgroup" aria-label="Экран">
-        <button type="button" class="tbtn" id="wakeBtn" aria-pressed="false">Не выключать экран</button>
+    <!-- ОБЕРТКА ДЛЯ СВОРАЧИВАЕМОЙ ПАНЕЛИ -->
+    <div class="toolbar-wrapper" id="toolbarWrapper">
+      <button type="button" class="toolbar-toggle" id="toolbarToggle" aria-expanded="true">Свернуть панель ▼</button>
+      
+      <div class="toolbar" role="toolbar" aria-label="Настройки песни">
+        <div class="tgroup" aria-label="Транспонирование">
+          <button type="button" class="tbtn" id="tDown" aria-label="Тональность на полтона ниже">♭</button>
+          <button type="button" class="tbtn key" id="tReset" aria-label="Вернуть исходную тональность"><span id="tKey"></span><small id="tShift"></small></button>
+          <button type="button" class="tbtn" id="tUp" aria-label="Тональность на полтона выше">♯</button>
+        </div>
+        <div class="tgroup" aria-label="Выбор тональности">
+          <label class="tinylbl">Тональность <select id="keySelect"></select></label>
+          <button type="button" class="tbtn" id="flatsBtn" aria-label="Переключить диезы/бемоли">♭/♯</button>
+        </div>
+        <div class="tgroup" aria-label="Каподастр">
+          <label class="tinylbl">Каподастр <input type="range" id="capoRange" min="0" max="11" step="1" value="0"></label>
+          <span class="capo-info" id="capoInfo"></span>
+        </div>
+        <div class="tgroup" aria-label="Размер текста">
+          <button type="button" class="tbtn" id="fsDown" aria-label="Уменьшить текст">A−</button>
+          <button type="button" class="tbtn" id="fsUp" aria-label="Увеличить текст">A+</button>
+        </div>
+        <div class="tgroup" aria-label="Отображение">
+          <button type="button" class="tbtn" id="chordsToggle" aria-pressed="true" aria-label="Показать/скрыть аккорды">Аккорды</button>
+          <button type="button" class="tbtn" id="compactToggle" aria-pressed="false" aria-label="Компактный режим">Компактно</button>
+          <button type="button" class="tbtn" id="largeToggle" aria-pressed="false" aria-label="Крупный режим">Крупно</button>
+          <button type="button" class="tbtn" id="fullBtn" aria-label="Полноэкранный режим">⛶</button>
+        </div>
+        <div class="tgroup" aria-label="Автопрокрутка">
+          <button type="button" class="tbtn" id="scrollToggle" aria-pressed="false">▶ Прокрутка</button>
+          <button type="button" class="tbtn" id="scrollPause" aria-label="Пауза">⏸</button>
+          <label class="tinylbl">Скорость <input type="range" id="speedRange" min="5" max="200" step="1" value="30"> <span id="speedLabel">30</span></label>
+        </div>
+        <div class="tgroup" aria-label="Экран">
+          <button type="button" class="tbtn" id="wakeBtn" aria-pressed="false">Не выключать экран</button>
+        </div>
       </div>
     </div>
 
@@ -152,6 +159,13 @@
   </nav>
   <p class="keys">Клавиши: <kbd>/</kbd> поиск, <kbd>[</kbd> <kbd>]</kbd> тональность, <kbd>−</kbd> <kbd>=</kbd> размер, <kbd>s</kbd> прокрутка, <kbd>p</kbd> пауза, <kbd>Esc</kbd> назад.</p>
 </footer>
+
+<!-- НИЖНЯЯ НАВИГАЦИЯ (ТОЛЬКО ДЛЯ ТЕЛЕФОНОВ) -->
+<nav class="mobile-nav" aria-label="Мобильная навигация">
+  <a href="#/" data-nav="catalog">Каталог</a>
+  <a href="#/plan" data-nav="plan">Служение</a>
+  <a href="#/fav" data-nav="fav">Избранное <span class="badge" id="favCountMobile">0</span></a>
+</nav>
 
 <div class="modal" id="modal" hidden>
   <div class="modal-bg" data-close></div>
