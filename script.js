@@ -1,6 +1,6 @@
 "use strict";
 
-/* ====== ДАННЫЕ ПЕСЕН (сохранены полностью) ====== */
+/* ====== ДАННЫЕ ПЕСЕН ====== */
 const SONGS = [
 { id: "tolko-ty-gospod", title: "Только Ты Господь", lang: "ru", note: "Фрагмент", text: `
 Только Ты Господь
@@ -2284,11 +2284,9 @@ const state = {
   autoScroll: { active:false, paused:false, speed:30, raf:0, last:0 }
 };
 
-/* Пользовательские песни */
 const USER_SONGS = store.get("sc_user_songs", []);
 USER_SONGS.forEach(u => { if(u && u.id && !SONGS.some(s => s.id === u.id)){ u.user = true; SONGS.push(u); } });
 
-/* Подготовка данных */
 function prepareSongs(){
   SONGS.forEach((s, n) => {
     s.order = n;
@@ -2320,19 +2318,17 @@ const el = {
   sections: $("sectionsList"), playBar: $("playBar")
 };
 
-/* ===================== ТЕМА ===================== */
 function setTheme(t){
   document.documentElement.dataset.theme = t;
   const b = $("themeBtn");
   if(b){ b.textContent = t === "dark" ? "☀" : "☾"; b.setAttribute("aria-label", t === "dark" ? "Включить светлую тему" : "Включить тёмную тему"); }
   const m = document.querySelector('meta[name="theme-color"]');
-  if(m) m.content = t === "dark" ? "#141616" : "#F5F1EA";
+  if(m) m.content = t === "dark" ? "#202937" : "#F5F1EA"; 
   store.set("sc_theme", t);
 }
 setTheme(store.get("sc_theme", window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
 $("themeBtn").addEventListener("click", () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
 
-/* ===================== ПЕРСИСТЕНТ ПЕСНИ ===================== */
 const songStateKey = id => "sc_song_" + id;
 function loadSongState(id){
   const d = { shift:0, useFlats:null, capo:0 };
@@ -2349,7 +2345,6 @@ function saveSongState(){
   store.set(songStateKey(state.song.id), { shift:state.shift, useFlats:state.useFlats, capo:state.capo });
 }
 
-/* ===================== УТИЛИТЫ ===================== */
 function toast(msg){
   const t = $("toast");
   t.textContent = msg; t.classList.add("show");
@@ -2365,7 +2360,6 @@ function download(filename, text, type){
 function b64encode(str){ return btoa(unescape(encodeURIComponent(str))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""); }
 function b64decode(str){ str = str.replace(/-/g,"+").replace(/_/g,"/"); while(str.length % 4) str += "="; return decodeURIComponent(escape(atob(str))); }
 
-/* ===================== КАТАЛОГ ===================== */
 const FILTERS = [
   { id:"all", label:"Все" },
   { id:"ru", label:"Русский" },
@@ -2466,6 +2460,7 @@ function renderCatalog(){
       : "Ничего не найдено. Проверьте написание или попробуйте другое слово.";
   }
   el.favCount.textContent = state.fav.size;
+  if($("favCountMobile")) $("favCountMobile").textContent = state.fav.size;
 }
 el.search.addEventListener("input", () => { state.q = el.search.value; renderCatalog(); });
 el.clear.addEventListener("click", () => { state.q = ""; el.search.value = ""; renderCatalog(); el.search.focus(); });
@@ -2487,7 +2482,6 @@ function toggleFav(id){
   if(state.song) updateFavBtn();
 }
 
-/* ===================== РЕНДЕР ПЕСНИ ===================== */
 function chordHtml(raw){
   const kind = tokenKind(raw);
   if(kind === "label") return `<span class="lbl">${esc(raw)}</span>`;
@@ -2631,7 +2625,6 @@ function openSong(id, params){
   state.useFlats = saved.useFlats === null ? s.flats : saved.useFlats;
   state.capo = saved.capo;
 
-  // Программа служения: применить тональность элемента
   if(state.playing){
     const pl = playlists.find(p => p.id === state.playing.playlistId);
     const item = pl && pl.items[state.playing.index];
@@ -2640,7 +2633,6 @@ function openSong(id, params){
       if(typeof item.useFlats === "boolean") state.useFlats = item.useFlats;
     }
   }
-  // Тональность из URL
   if(params && params.get("k") && s.key){
     const tc = chordInfo(params.get("k"));
     const oc = chordInfo(s.key);
@@ -2688,7 +2680,6 @@ function setNav(name){
   document.querySelectorAll("[data-nav]").forEach(a => a.classList.toggle("active", a.dataset.nav === name));
 }
 
-/* ===================== УПРАВЛЕНИЕ ===================== */
 function transpose(d){
   if(!state.song || !state.song.hasChords) return;
   state.shift = mod12(state.shift + d);
@@ -2771,7 +2762,6 @@ el.sections.addEventListener("click", e => {
   if(b){ const t = document.getElementById(b.dataset.sec); if(t) t.scrollIntoView({ behavior:"smooth", block:"start" }); }
 });
 
-/* ===================== АВТОПРОКРУТКА ===================== */
 const AS = state.autoScroll;
 function setScrollBtn(){
   $("scrollToggle").setAttribute("aria-pressed", AS.active);
@@ -2816,7 +2806,6 @@ $("speedRange").addEventListener("input", e => {
 AS.speed = store.get("sc_speed", 30);
 $("speedRange").value = AS.speed; $("speedLabel").textContent = AS.speed;
 
-/* ===================== WAKE LOCK ===================== */
 let wakeLock = null, wakeWanted = false;
 function updateWakeBtn(){
   const b = $("wakeBtn");
@@ -2848,7 +2837,6 @@ document.addEventListener("visibilitychange", () => {
   if(wakeWanted && !wakeLock && document.visibilityState === "visible") requestWake();
 });
 
-/* ===================== ИЗБРАННОЕ: ЭКСПОРТ/ИМПОРТ ===================== */
 function exportFav(){
   download("favorites.json", JSON.stringify([...state.fav], null, 2));
 }
@@ -2868,7 +2856,6 @@ function importFavFromFile(file){
   reader.readAsText(file);
 }
 
-/* ===================== ПРОГРАММЫ СЛУЖЕНИЯ ===================== */
 let playlists = store.get("sc_playlists", []);
 function savePlaylists(){ store.set("sc_playlists", playlists); }
 const genId = () => "pl-" + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
@@ -3063,7 +3050,6 @@ $("planList").addEventListener("click", e => {
   }
 });
 
-/* ===================== НАСТРОЙКИ ===================== */
 function openModal(title, html){
   $("modalTitle").textContent = title;
   $("modalBody").innerHTML = html;
@@ -3114,7 +3100,6 @@ $("settingsBtn").addEventListener("click", () => {
   });
 });
 
-/* ===================== ФОРМА ДОБАВЛЕНИЯ ПЕСНИ ===================== */
 function openAddSongForm(){
   openModal("Добавить песню", `
     <label class="field"><span>Название *</span><input id="addTitle"></label>
@@ -3185,7 +3170,6 @@ function openAddSongForm(){
   });
 }
 
-/* ===================== ДИАГНОСТИКА ===================== */
 function openDiagnostics(){
   const issues = [];
   const ids = new Map(), titles = new Map();
@@ -3213,7 +3197,6 @@ function openDiagnostics(){
   openModal("Диагностика каталога", `<p class="result-info">Песен в каталоге: ${SONGS.length}. Проблемных песен: ${bySong.size}.</p>${html}`);
 }
 
-/* ===================== РОУТИНГ ===================== */
 function route(){
   const raw = location.hash.replace(/^#\/?/, "");
   const qi = raw.indexOf("?");
@@ -3226,7 +3209,6 @@ function route(){
 }
 window.addEventListener("hashchange", route);
 
-/* ===================== КЛАВИАТУРА ===================== */
 document.addEventListener("keydown", e => {
   if(e.ctrlKey || e.metaKey || e.altKey) return;
   const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
@@ -3248,9 +3230,30 @@ document.addEventListener("keydown", e => {
   }
 });
 
-/* ===================== ИНИЦИАЛИЗАЦИЯ ===================== */
 fillKeyFilter();
 renderCatalog();
 route();
 setScrollBtn();
 updateWakeBtn();
+
+/* ====== ЛОГИКА СВОРАЧИВАНИЯ ПАНЕЛИ ====== */
+const toolbarToggle = document.getElementById("toolbarToggle");
+if (toolbarToggle) {
+  let toolbarClosed = localStorage.getItem("sc_toolbar_closed") === "true";
+  
+  if (toolbarClosed) {
+    document.body.classList.add("toolbar-closed");
+    toolbarToggle.textContent = "Открыть панель ▲";
+    toolbarToggle.setAttribute("aria-expanded", "false");
+  } else {
+    toolbarToggle.textContent = "Свернуть панель ▼";
+    toolbarToggle.setAttribute("aria-expanded", "true");
+  }
+
+  toolbarToggle.addEventListener("click", () => {
+    const isClosed = document.body.classList.toggle("toolbar-closed");
+    toolbarToggle.textContent = isClosed ? "Открыть панель ▲" : "Свернуть панель ▼";
+    toolbarToggle.setAttribute("aria-expanded", !isClosed);
+    localStorage.setItem("sc_toolbar_closed", isClosed);
+  });
+}
