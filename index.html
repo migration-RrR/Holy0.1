@@ -21,7 +21,7 @@
   <nav class="nav desktop-nav" aria-label="Основная навигация">
     <a href="#/" data-nav="catalog">Каталог</a>
     <a href="#/plan" data-nav="plan">Служение</a>
-    <a href="#/fav" data-nav="fav">Избранное <span class="badge" id="favCount">0</span></a>
+<a href="#/fav" data-nav="fav">Избранное</a>
   </nav>
   <div class="header-actions">
     <button type="button" class="icon-btn" id="settingsBtn" aria-label="Настройки">⚙</button>
@@ -82,45 +82,6 @@
       <button type="button" id="playExit" class="tbtn" aria-label="Выйти из программы">×</button>
     </div>
 
-    <!-- ОБЕРТКА ДЛЯ СВОРАЧИВАЕМОЙ ПАНЕЛИ -->
-    <div class="toolbar-wrapper" id="toolbarWrapper">
-      <button type="button" class="toolbar-toggle" id="toolbarToggle" aria-expanded="true">Свернуть панель ▼</button>
-      
-      <div class="toolbar" role="toolbar" aria-label="Настройки песни">
-        <div class="tgroup" aria-label="Транспонирование">
-          <button type="button" class="tbtn" id="tDown" aria-label="Тональность на полтона ниже">♭</button>
-          <button type="button" class="tbtn key" id="tReset" aria-label="Вернуть исходную тональность"><span id="tKey"></span><small id="tShift"></small></button>
-          <button type="button" class="tbtn" id="tUp" aria-label="Тональность на полтона выше">♯</button>
-        </div>
-        <div class="tgroup" aria-label="Выбор тональности">
-          <label class="tinylbl">Тональность <select id="keySelect"></select></label>
-          <button type="button" class="tbtn" id="flatsBtn" aria-label="Переключить диезы/бемоли">♭/♯</button>
-        </div>
-        <div class="tgroup" aria-label="Каподастр">
-          <label class="tinylbl">Каподастр <input type="range" id="capoRange" min="0" max="11" step="1" value="0"></label>
-          <span class="capo-info" id="capoInfo"></span>
-        </div>
-        <div class="tgroup" aria-label="Размер текста">
-          <button type="button" class="tbtn" id="fsDown" aria-label="Уменьшить текст">A−</button>
-          <button type="button" class="tbtn" id="fsUp" aria-label="Увеличить текст">A+</button>
-        </div>
-        <div class="tgroup" aria-label="Отображение">
-          <button type="button" class="tbtn" id="chordsToggle" aria-pressed="true" aria-label="Показать/скрыть аккорды">Аккорды</button>
-          <button type="button" class="tbtn" id="compactToggle" aria-pressed="false" aria-label="Компактный режим">Компактно</button>
-          <button type="button" class="tbtn" id="largeToggle" aria-pressed="false" aria-label="Крупный режим">Крупно</button>
-          <button type="button" class="tbtn" id="fullBtn" aria-label="Полноэкранный режим">⛶</button>
-        </div>
-        <div class="tgroup" aria-label="Автопрокрутка">
-          <button type="button" class="tbtn" id="scrollToggle" aria-pressed="false">▶ Прокрутка</button>
-          <button type="button" class="tbtn" id="scrollPause" aria-label="Пауза">⏸</button>
-          <label class="tinylbl">Скорость <input type="range" id="speedRange" min="5" max="200" step="1" value="30"> <span id="speedLabel">30</span></label>
-        </div>
-        <div class="tgroup" aria-label="Экран">
-          <button type="button" class="tbtn" id="wakeBtn" aria-pressed="false">Не выключать экран</button>
-        </div>
-      </div>
-    </div>
-
     <div class="song-wrap">
       <article class="song">
         <h2 id="songTitle"></h2>
@@ -164,8 +125,47 @@
 <nav class="mobile-nav" aria-label="Мобильная навигация">
   <a href="#/" data-nav="catalog">Каталог</a>
   <a href="#/plan" data-nav="plan">Служение</a>
-  <a href="#/fav" data-nav="fav">Избранное <span class="badge" id="favCountMobile">0</span></a>
+<a href="#/fav" data-nav="fav">Избранное</a>
 </nav>
+
+<!-- ПАНЕЛЬ ИНСТРУМЕНТОВ (ВЫНЕСЕНА В КОНЕЦ, ЧТОБЫ НЕ ГЛЮЧИЛА) -->
+<div class="toolbar-wrapper" id="toolbarWrapper">
+  <button type="button" class="toolbar-toggle" id="toolbarToggle" aria-expanded="true">Свернуть панель ▼</button>
+  
+  <div class="toolbar" role="toolbar" aria-label="Настройки песни">
+    <div class="tgroup" aria-label="Транспонирование">
+      <button type="button" class="tbtn" id="tDown" aria-label="Тональность на полтона ниже">♭</button>
+      <button type="button" class="tbtn key" id="tReset" aria-label="Вернуть исходную тональность"><span id="tKey"></span><small id="tShift"></small></button>
+      <button type="button" class="tbtn" id="tUp" aria-label="Тональность на полтона выше">♯</button>
+    </div>
+    <div class="tgroup" aria-label="Выбор тональности">
+      <label class="tinylbl">Тональность <select id="keySelect"></select></label>
+      <button type="button" class="tbtn" id="flatsBtn" aria-label="Переключить диезы/бемоли">♭/♯</button>
+    </div>
+    <div class="tgroup" aria-label="Каподастр">
+      <label class="tinylbl">Каподастр <input type="range" id="capoRange" min="0" max="11" step="1" value="0"></label>
+      <span class="capo-info" id="capoInfo"></span>
+    </div>
+    <div class="tgroup" aria-label="Размер текста">
+      <button type="button" class="tbtn" id="fsDown" aria-label="Уменьшить текст">A−</button>
+      <button type="button" class="tbtn" id="fsUp" aria-label="Увеличить текст">A+</button>
+    </div>
+    <div class="tgroup" aria-label="Отображение">
+      <button type="button" class="tbtn" id="chordsToggle" aria-pressed="true" aria-label="Показать/скрыть аккорды">Аккорды</button>
+      <button type="button" class="tbtn" id="compactToggle" aria-pressed="false" aria-label="Компактный режим">Компактно</button>
+      <button type="button" class="tbtn" id="largeToggle" aria-pressed="false" aria-label="Крупный режим">Крупно</button>
+      <button type="button" class="tbtn" id="fullBtn" aria-label="Полноэкранный режим">⛶</button>
+    </div>
+    <div class="tgroup" aria-label="Автопрокрутка">
+      <button type="button" class="tbtn" id="scrollToggle" aria-pressed="false">▶ Прокрутка</button>
+      <button type="button" class="tbtn" id="scrollPause" aria-label="Пауза">⏸</button>
+      <label class="tinylbl">Скорость <input type="range" id="speedRange" min="5" max="200" step="1" value="30"> <span id="speedLabel">30</span></label>
+    </div>
+    <div class="tgroup" aria-label="Экран">
+      <button type="button" class="tbtn" id="wakeBtn" aria-pressed="false">Не выключать экран</button>
+    </div>
+  </div>
+</div>
 
 <div class="modal" id="modal" hidden>
   <div class="modal-bg" data-close></div>
