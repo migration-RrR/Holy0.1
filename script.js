@@ -2314,7 +2314,7 @@ const el = {
   catalog: $("catalogView"), songView: $("songView"), planView: $("planView"),
   grid: $("grid"), chips: $("chips"), search: $("searchInput"), clear: $("clearSearch"),
   sort: $("sortSelect"), keyFilter: $("keyFilter"), info: $("resultInfo"),
-  empty: $("empty"), emptyText: $("emptyText"), favCount: $("favCount"), body: $("songBody"),
+  empty: $("empty"), emptyText: $("emptyText"), body: $("songBody"),
   sections: $("sectionsList"), playBar: $("playBar")
 };
 
@@ -2459,8 +2459,6 @@ function renderCatalog(){
       ? "В избранном пока пусто. Нажмите ☆ на карточке песни, чтобы добавить её сюда."
       : "Ничего не найдено. Проверьте написание или попробуйте другое слово.";
   }
-  el.favCount.textContent = state.fav.size;
-  if($("favCountMobile")) $("favCountMobile").textContent = state.fav.size;
 }
 el.search.addEventListener("input", () => { state.q = el.search.value; renderCatalog(); });
 el.clear.addEventListener("click", () => { state.q = ""; el.search.value = ""; renderCatalog(); el.search.focus(); });
